@@ -1,0 +1,125 @@
+'\"
+.\" Manpage for slweb(1)
+.
+.mso an-ext.tmac
+.
+.TH SLWEB "1" "11 Nov 2020" "slweb v0.1-beta" "General Commands Manual"
+.SH NAME
+slweb \- Simple static website generator
+.
+.SH SYNOPSIS
+.SY slweb
+.RI [ options ]
+.RI [ filename ]
+.YS
+.
+.SH COPYRIGHT
+slweb Copyright \(co 2020 Strahinya Radich.
+.
+.SH DESCRIPTION
+.B Slweb
+is a static website generator which aims at being simplistic. It uses
+.BR sed (1)
+to transform a custom Markdown-like syntax into
+.SM HTML.
+.
+.SH OPTIONS
+.
+.TP
+.B \-b
+.TQ
+.B \-\-body\-only
+.br
+Only add the contents of the \fC<body>\fR tag, skipping \fC<html>\fR and
+\fC<head>\fR.
+.
+.TP
+.B \-d <\fIdirectory\fR>
+.TQ
+.B \-\-basedir <\fIdirectory\fR>
+.br
+Set the base directory as a reference point to normalize paths in local links
+(the argument to
+.B --relative-to
+option for the
+.BR realpath (1)
+command).
+.
+.TP
+.B \-h
+.TQ
+.B \-\-help
+.br
+Print this usage information screen.
+.
+.TP
+.B \-v
+.TQ
+.B \-\-version
+.br
+Print program version and exit.
+.
+.SH "SEE ALSO"
+.BR sed (1)
+.
+.SH EXAMPLES
+.
+.PP
+GIven the file \fCindex.slw\fR in the current directory:
+.EX
+.in +4
+.sp
+site-name: Test website
+site-desc: My first website in slweb
+---
+
+{main}
+# Hello world
+
+This is an _example_ of a statically generated HTML.
+
+{/main}
+.in -4
+.sp
+.EE
+after using the command:
+.EX
+.in +4
+.sp
+$ slweb index.slw > index.html
+.in -4
+.sp
+.EE
+file \fCindex.html\fR contains:
+.EX
+.in +4
+.sp
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Test website</title>
+    <meta charset="utf8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="generator" content="slweb" />
+</head>
+<body>
+
+<main>
+<h1>Hello world</h1>
+
+<p>This is an <em>example</em> of a statically generated HTML.</p>
+
+</main>
+</body>
+</html>
+.in -4
+.sp
+.EE
+.
+.SH BUGS
+.
+.PP
+Bugs can be reported using the Github issue tracker at:
+.UR https://\:github.com/\:Strahinja/\:slweb/\:issues
+.UE
+

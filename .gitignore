@@ -1,0 +1,14 @@
+*~
+*.bak
+*.orig
+*.rej
+*.o
+*.pdf
+*.ps
+*.swp
+nohup.out
+*.png
+*.gz
+
+examples/index.html
+

@@ -1,0 +1,10 @@
+site-name: Test website
+site-desc: My first website in slweb
+---
+
+{main}
+# Hello world
+
+This is an _example_ of a statically generated HTML.
+
+{/main}
