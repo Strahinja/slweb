@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 BODY_ONLY=0
 CSSFILE=index.css
