@@ -43,10 +43,10 @@ install: all
 	cp slweb.1.gz $(MANDIR)
 
 uninstall:
-	rm $(BINDIR)/slweb $(MANDIR)/slweb.1.gz 2>/dev/null
+	rm -f $(BINDIR)/slweb $(MANDIR)/slweb.1.gz 2>/dev/null
 
-clean: slweb.1.gz slweb.pdf $(EXAMPLE_PAGES_HTML) slweb slweb.1
-	rm $^ 2>/dev/null
+clean: 
+	rm -f slweb.1.gz slweb.pdf $(EXAMPLE_PAGES_HTML) slweb slweb.1 2>/dev/null
 
 .PHONY: in examples view doc install uninstall clean
 
