@@ -4,7 +4,7 @@ BODY_ONLY=0
 CSSFILE=index.css
 INFILE=index.slw
 OUTFILE=index.html
-VERSION=v0.1-beta
+VERSION=%VERSION%
 
 function throw()
 {
@@ -91,6 +91,7 @@ function body()
             -e 's/\*\*\([^*]\+\)\*\*/<strong>\1<\/strong>/g' \
             -e 's/\*\([^*]\+\)\*/<em>\1<\/em>/g' \
             -e 's/_\([^_]\+\)_/<em>\1<\/em>/g' \
+            -e 's/`\([^`]\+\)`/<code>\1<\/code>/g' \
             -e 's/{\.\(.*\)}/<div class="\1">/' \
             -e 's/{\/\.\(.*\)}/<\/div><!--\1-->/' \
             -e 's/{#\(.*\)}/<div id="\1">/' \
@@ -104,7 +105,7 @@ function body()
         sed -e '1h;2,$H;$!d;g;s/\([^>}\n]\)$/\1<\/p>\n\n/g')
 
     INCLUDE=$(echo "$BODY" | \
-        sed -e'/{include/s/.*{include \"\([.\/a-z ]\+\)\"}.*/\1/;t;d' | \
+        sed -e'/{include/s/.*{include \"\([.\/a-z0-9_ -]\+\)\"}.*/\1/;t;d' | \
         sed 1q)
 
     while [ ! -z "$INCLUDE" ]; do
@@ -112,7 +113,7 @@ function body()
         BODY=$(echo "$BODY" | \
             sed -e"s/{include \\\"$(echo $INCLUDE | sed -e's/\//\\\//g')\\\"}/$(echo $INCLUDE_BODY | sed -e's/\//\\\//g')/")
         INCLUDE=$(echo "$BODY" | \
-            sed -e'/{include/s/.*{include \"\([.\/a-z ]\+\)\"}.*/\1/;t;d' | \
+            sed -e'/{include/s/.*{include \"\([.\/a-z0-9_ -]\+\)\"}.*/\1/;t;d' | \
             sed 1q)
     done
     echo "$BODY"
@@ -168,14 +169,14 @@ grep -- '---' $INFILE 2>&1 >/dev/null \
 
 CSSHREF=$CSSFILE
 INDIR=$(dirname $INFILE 2>/dev/null)
-[ "$INDIR" != "." ] && CSSHREF=../$CSSFILE
+[ "$INDIR" != "." ] && CSSHREF=$CSSFILE
 #echo CSSHREF=$CSSHREF >&2
 
 if [ $BODY_ONLY -eq 0 ]; then
     begin_html
     begin_head
     head
-    [ -f $CSSFILE ] && add_css $CSSHREF
+    [ -f $INDIR/$CSSFILE ] && add_css $CSSHREF
     end_head
     begin_body
 fi

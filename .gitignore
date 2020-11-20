@@ -9,6 +9,8 @@
 nohup.out
 *.png
 *.gz
-
-examples/index.html
+slweb
+slweb.1
+examples/basic/index.html
+examples/includes/index.html
 

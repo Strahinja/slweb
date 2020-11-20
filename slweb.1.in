@@ -3,7 +3,7 @@
 .
 .mso an-ext.tmac
 .
-.TH SLWEB "1" "11 Nov 2020" "slweb v0.1-beta" "General Commands Manual"
+.TH SLWEB "1" "11 Nov 2020" "slweb %VERSION%" "General Commands Manual"
 .SH NAME
 slweb \- Simple static website generator
 .
@@ -58,6 +58,72 @@ Print this usage information screen.
 .B \-\-version
 .br
 Print program version and exit.
+.
+.SH REFERENCE
+.
+.PP
+Files processed by
+.B slweb
+are using a minimal subset of Markdown with added directives.  Supported 
+.B "Markdown features"
+are:
+.IP \[bu] 4
+.BR Paragraphs .
+Text surrounded by newlines will be put inside \fC<p></p>\fR tags.
+.
+.IP \[bu]
+.BR Headings .
+A line starting with \fC#\fR followed by space will be put inside
+\fC<h?></h?>\fR, where \fC?\fR stands for 1-4, depending on the number of
+hashtags.
+.
+.IP \[bu]
+.BR "Bold/italic (limited)" .
+Text inside \fC*asterisks*\fR or \fC_underlines_\fR will be put inside
+\fC<em></em>\fR. Text inside \fC**double asterisks**\fR will be put inside
+\fC<strong></strong>\fR.
+.
+.IP \[bu]
+.BR Backticks .
+Text inside \fC`backticks`\fR will be put inside \fC<code></code>\fR.
+.
+.IP \[bu]
+.BR "Links (limited)" .
+The construct \fC[A link](https://example.com)\fR will be converted into \fC<a
+href="https://example.com">A link</a>\fR.
+.
+.PP
+.BR "Directives " include:
+.
+.IP \[bu] 4
+.BR "Class divs" .
+Directive \fC{.myclass}{/.myclass}\fR will be transformed into \fC<div
+class="myclass"></div>\fR.
+.
+.IP \[bu]
+.BR "Id divs" .
+Directive \fC{#myid}{/#myid}\fR will be transformed into \fC<div
+id="myid"></div>\fR.
+.
+.IP \[bu]
+.BR "General tags" .
+Directive \fC{sometag}{/sometag}\fR will be transformed into
+\fC<sometag></sometag>\fR.
+.
+.IP \[bu]
+.BR Includes .
+Directive \fC{include "somefile"}\fR will run \fCslweb -b\fR on
+.I somefile.slw
+(related to the directory containing the file containing the directive) and
+include the resulting
+.SM HTML.
+.
+.IP \[bu]
+.BR "Brand \[lq]watermark\[rq]" .
+Directive \fC{made-by}\fR is converted into a div containing the
+\[lq]watermark\[rq] text and a link to the
+.B slweb
+home page.
 .
 .SH "SEE ALSO"
 .BR sed (1)
