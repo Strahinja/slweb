@@ -1,0 +1,6 @@
+## DESCRIPTION
+
+**Slweb** is a static website generator which aims at being simplistic. It uses
+**sed** (1) to transform a custom Markdown-like syntax into
+{abbr}HTML{/abbr}.
+

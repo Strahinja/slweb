@@ -1,4 +1,12 @@
 {header}
-Page header
+{.left}
+SLWEB(1)
+{/.left}
+{.center}
+General Commands Manual
+{/.center}
+{.right}
+SLWEB(1)
+{/.right}
 {/header}
 

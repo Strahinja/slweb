@@ -1,18 +1,8 @@
-header
-{
-    background: #ffa;
-    padding: 1em;
-}
-
-main
-{
-    background: #ccf;
-    padding: 1em;
-}
-
+header,
 footer
 {
-    background: #faa;
-    padding: 1em;
+	display: flex;
+	flex-direction: row;
+	justify-content: space-between;
 }
 

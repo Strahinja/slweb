@@ -3,7 +3,7 @@
 .
 .mso an-ext.tmac
 .
-.TH SLWEB "1" "11 Nov 2020" "slweb %VERSION%" "General Commands Manual"
+.TH SLWEB "1" "%DATE%" "slweb %VERSION%" "General Commands Manual"
 .SH NAME
 slweb \- Simple static website generator
 .
@@ -85,12 +85,18 @@ Text inside \fC*asterisks*\fR or \fC_underlines_\fR will be put inside
 .
 .IP \[bu]
 .BR Backticks .
-Text inside \fC`backticks`\fR will be put inside \fC<code></code>\fR.
+Text inside \fC`backticks`\fR will be put inside \fC<code></code>\fR (one per
+line, both backticks need to be on the same line).
+
 .
 .IP \[bu]
 .BR "Links (limited)" .
 The construct \fC[A link](https://example.com)\fR will be converted into \fC<a
 href="https://example.com">A link</a>\fR.
+.
+.IP \[bu]
+.BR "Line breaks" .
+Space followed by a newline will be turned into \fC<br />\fR.
 .
 .PP
 .BR "Directives " include:
@@ -116,7 +122,7 @@ Directive \fC{include "somefile"}\fR will run \fCslweb -b\fR on
 .I somefile.slw
 (related to the directory containing the file containing the directive) and
 include the resulting
-.SM HTML.
+.SM HTML. Directive needs to start at the beginning of the line.
 .
 .IP \[bu]
 .BR "Brand \[lq]watermark\[rq]" .

@@ -84,36 +84,62 @@ EOT
 function body()
 {
     BODY=$(echo "$1" | \
-        sed -e's/#### \([^\n]*\)$/<h4>\1<\/h4>/g' \
-            -e's/### \([^\n]*\)$/<h3>\1<\/h3>/g' \
-            -e's/## \([^\n]*\)$/<h2>\1<\/h2>/g' \
-            -e's/# \([^\n]*\)$/<h1>\1<\/h1>/g' \
-            -e 's/\*\*\([^*]\+\)\*\*/<strong>\1<\/strong>/g' \
-            -e 's/\*\([^*]\+\)\*/<em>\1<\/em>/g' \
-            -e 's/_\([^_]\+\)_/<em>\1<\/em>/g' \
-            -e 's/`\([^`]\+\)`/<code>\1<\/code>/g' \
-            -e 's/{\.\(.*\)}/<div class="\1">/' \
-            -e 's/{\/\.\(.*\)}/<\/div><!--\1-->/' \
-            -e 's/{#\(.*\)}/<div id="\1">/' \
-            -e 's/{\/#\(.*\)}/<\/div><!--\1-->/' \
-            -e "s/{made-by}/$MADEBY/g" \
-            -e 's/{\([a-z-]\+\)}/<\1>/g' \
-            -e 's/{\/\([a-z-]\+\)}/<\/\1>/g' \
-            -e "s/\\[\\([^]]\\+\\)\\](\\([^)]\\+\\))/<a href=\"$(realpath --relative-to=$BASEDIR $(dirname $INFILE) | sed -e's/\//\\\//g')\/\\2\">\\1<\\/a>/" | \
+        sed -e's/^#### \([^\n]*\)$/<h4>\1<\/h4>/g' \
+            -e's/^### \([^\n]*\)$/<h3>\1<\/h3>/g' \
+            -e's/^## \([^\n]*\)$/<h2>\1<\/h2>/g' \
+            -e's/^# \([^\n]*\)$/<h1>\1<\/h1>/g' | \
         sed -e '1h;2,$H;$!d;g;s/\n\n\([^<{\n]\+\)/\n\n<p>\1/g' | \
         sed -e '1h;2,$H;$!d;g;s/\([^>}\n]\)\n\n/\1<\/p>\n\n/g' | \
-        sed -e '1h;2,$H;$!d;g;s/\([^>}\n]\)$/\1<\/p>\n\n/g')
+        sed -e '1h;2,$H;$!d;g;s/\([^>}\n]\)$/\1<\/p>\n\n/g' | \
+        sed -e 's/^\*\*\([^*]*\)\*\*/<strong>\1<\/strong>/g' \
+            -e 's/\([^\\]\)\*\*\([^*]*\)\*\*/\1<strong>\2<\/strong>/g' \
+            -e 's/^\*\([^*]*\)\*/<em>\1<\/em>/g' \
+            -e 's/\([^\\]\)\*\([^*]*\)\*/\1<em>\2<\/em>/g' \
+            -e 's/\\\*/\*/g' \
+            -e 's/^_\([^_]\+\)_/<em>\1<\/em>/g' \
+            -e 's/\([^\\]\)_\([^_]\+\)_/\1<em>\2<\/em>/g' \
+            -e 's/\\_/_/g' \
+            -e 's/\\#/#/g' \
+            -e 's/\\---/---/g' \
+            -e 's/\\$/<br \/>/g' \
+            -e 's/`\(.*\)`/<code>\1<\/code>/g' \
+            -e 's/\\`/`/g' \
+            -e 's/^{\.\(.*\)}/<div class="\1">/' \
+            -e 's/\([^\\]\){\.\(.*\)}/\1<div class="\2">/' \
+            -e 's/\\\({\..*}\)/\1/' \
+            -e 's/^{\/\.\(.*\)}/<\/div><!--\1-->/' \
+            -e 's/\([^\\]\){\/\.\(.*\)}/\1<\/div><!--\2-->/' \
+            -e 's/\\\({\/\..*}\)/\1/' \
+            -e 's/^{#\(.*\)}/<div id="\1">/' \
+            -e 's/\([^\\]\){#\(.*\)}/\1<div id="\2">/' \
+            -e 's/\\\({#.*}\)/\1/' \
+            -e 's/^{\/#\(.*\)}/<\/div><!--\1-->/' \
+            -e 's/\([^\\]\){\/#\(.*\)}/\1<\/div><!--\2-->/' \
+            -e 's/\\\({\/#.*}\)/\1/' \
+            -e "s/^{made-by}/$MADEBY/g" \
+            -e "s/\([^\\]\){made-by}/\1$MADEBY/g" \
+            -e 's/\\\({made-by}\)/\1/g' \
+            -e 's/^{\([a-z-]\+\)}/<\1>/g' \
+            -e 's/\([^\\]\){\([a-z-]\+\)}/\1<\2>/g' \
+            -e 's/\\\({[a-z-]\+}\)/\1/g' \
+            -e 's/^{\/\([a-z-]\+\)}/<\/\1>/g' \
+            -e 's/\([^\\]\){\/\([a-z-]\+\)}/\1<\/\2>/g' \
+            -e 's/\\\({\/[a-z-]\+}\)/\1/g' \
+            -e 's/ $/<br \/>/g' \
+            -e "s/^\\[\\([^]]\\+\\)\\](\\([^)]\\+\\))/<a href=\"$(realpath --relative-to=$BASEDIR $(dirname $INFILE) | sed -e's/\//\\\//g' -e's/&/\\\&/g')\/\\2\">\\1<\\/a>/" \
+            -e "s/\\([^\\\\]\\)\\[\\([^]]\\+\\)\\](\\([^)]\\+\\))/\\1<a href=\"$(realpath --relative-to=$BASEDIR $(dirname $INFILE) | sed -e's/\//\\\//g' -e's/&/\\\&/g')\/\\3\">\\2<\\/a>/" \
+            -e 's/\\\(\[[^]]\+\]([^)]\+)\)/\1/g')
 
     INCLUDE=$(echo "$BODY" | \
-        sed -e'/{include/s/.*{include \"\([.\/a-z0-9_ -]\+\)\"}.*/\1/;t;d' | \
+        sed -e'/^{include/s/{include \"\([.\/a-z0-9_ -]\+\)\"}.*/\1/;t;d' | \
         sed 1q)
 
-    while [ ! -z "$INCLUDE" ]; do
+    while [ -n "$INCLUDE" ]; do
         INCLUDE_BODY=$($0 -b -d $(dirname $INFILE) "$(dirname $INFILE)/$INCLUDE.slw")
         BODY=$(echo "$BODY" | \
-            sed -e"s/{include \\\"$(echo $INCLUDE | sed -e's/\//\\\//g')\\\"}/$(echo $INCLUDE_BODY | sed -e's/\//\\\//g')/")
+            sed -e"s/^{include \\\"$(echo $INCLUDE | sed -e's/\//\\\//g' -e's/&/\\\&/g')\\\"}/$(echo $INCLUDE_BODY | sed -e's/\//\\\//g' -e's/&/\\\&/g')/")
         INCLUDE=$(echo "$BODY" | \
-            sed -e'/{include/s/.*{include \"\([.\/a-z0-9_ -]\+\)\"}.*/\1/;t;d' | \
+            sed -e'/^{include/s/.*{include \"\([.\/a-z0-9_ -]\+\)\"}.*/\1/;t;d' | \
             sed 1q)
     done
     echo "$BODY"
@@ -163,8 +189,8 @@ done
 
 #echo -n Generating ${VARS[site-name]}: ${VARS[site-desc]}...
 
-grep -- '---' $INFILE 2>&1 >/dev/null \
-    && DOC=$(sed '0,/---/d' $INFILE) \
+grep -- '^---' $INFILE 2>&1 >/dev/null \
+    && DOC=$(sed '0,/^---/d' $INFILE) \
     || DOC=$(cat $INFILE)
 
 CSSHREF=$CSSFILE
