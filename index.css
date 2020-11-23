@@ -1,0 +1,61 @@
+html,
+body
+{
+	font-family: "Noto Serif", "Times New Roman", serif;
+	font-size: 12pt;
+}
+
+pre,
+code
+{
+	font-family: "Noto Mono", "Courier New", "Courier", monospace;
+	background-color: #eef;
+}
+
+code
+{
+	padding: .5em 1em;
+}
+
+pre
+{
+	padding: 1em;
+	line-height: 1.2em;
+}
+
+main
+{
+	margin: 0 auto;
+	max-width: 1024px;
+}
+
+h1
+{
+	font-size: 300%;
+	font-style: oblique;
+	color: #005;
+}
+
+p
+{
+	line-height: 1.7em;
+	margin: 0;
+	margin-bottom: 1em;
+	padding: 0;
+}
+
+#made-by
+{
+	font-size: 90%;
+	padding: .5em 2em;
+	text-align: center;
+	background-color: #eef;
+}
+
+@media (max-width: 920px)
+{
+main
+{
+	max-width: auto;
+}
+}

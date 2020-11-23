@@ -88,6 +88,8 @@ function body()
             -e's/^### \([^\n]*\)$/<h3>\1<\/h3>/g' \
             -e's/^## \([^\n]*\)$/<h2>\1<\/h2>/g' \
             -e's/^# \([^\n]*\)$/<h1>\1<\/h1>/g' | \
+        sed -e '1h;2,$H;$!d;g;s/\n\+\n```[^\n]*\n/\n\n<pre>\n/g' | \
+	sed -e 's/^```$/<\/pre>\n\n/g' | \
         sed -e '1h;2,$H;$!d;g;s/\n\n\([^<{\n]\+\)/\n\n<p>\1/g' | \
         sed -e '1h;2,$H;$!d;g;s/\([^>}\n]\)\n\n/\1<\/p>\n\n/g' | \
         sed -e '1h;2,$H;$!d;g;s/\([^>}\n]\)$/\1<\/p>\n\n/g' | \
@@ -100,8 +102,7 @@ function body()
             -e 's/\([^\\]\)_\([^_]\+\)_/\1<em>\2<\/em>/g' \
             -e 's/\\_/_/g' \
             -e 's/\\#/#/g' \
-            -e 's/\\---/---/g' \
-            -e 's/\\$/<br \/>/g' \
+            -e 's/\\$//g' \
             -e 's/`\(.*\)`/<code>\1<\/code>/g' \
             -e 's/\\`/`/g' \
             -e 's/^{\.\(.*\)}/<div class="\1">/' \
@@ -126,6 +127,9 @@ function body()
             -e 's/\([^\\]\){\/\([a-z-]\+\)}/\1<\/\2>/g' \
             -e 's/\\\({\/[a-z-]\+}\)/\1/g' \
             -e 's/ $/<br \/>/g' \
+            -e "s/^\\[\\([^]]\\+\\)\\](\\([a-z]\+:\/\/[^)]\\+\\))/<a href=\"\\2\">\\1<\\/a>/" \
+            -e "s/\\([^\\\\]\\)\\[\\([^]]\\+\\)\\](\\([a-z]\+:\/\/[^)]\\+\\))/\\1<a href=\"\\3\">\\2<\\/a>/" \
+            -e 's/\\\(\[[^]]\+\]([a-z]\+:\/\/[^)]\+)\)/\1/g' \
             -e "s/^\\[\\([^]]\\+\\)\\](\\([^)]\\+\\))/<a href=\"$(realpath --relative-to=$BASEDIR $(dirname $INFILE) | sed -e's/\//\\\//g' -e's/&/\\\&/g')\/\\2\">\\1<\\/a>/" \
             -e "s/\\([^\\\\]\\)\\[\\([^]]\\+\\)\\](\\([^)]\\+\\))/\\1<a href=\"$(realpath --relative-to=$BASEDIR $(dirname $INFILE) | sed -e's/\//\\\//g' -e's/&/\\\&/g')\/\\3\">\\2<\\/a>/" \
             -e 's/\\\(\[[^]]\+\]([^)]\+)\)/\1/g')
@@ -135,9 +139,10 @@ function body()
         sed 1q)
 
     while [ -n "$INCLUDE" ]; do
-        INCLUDE_BODY=$($0 -b -d $(dirname $INFILE) "$(dirname $INFILE)/$INCLUDE.slw")
+        INCLUDE_BODY=$($0 -b -d $(dirname $INFILE) "$(dirname $INFILE)/$INCLUDE.slw" | \
+		sed -z -e's/\//\\\//g' -e's/&/\\\&/g' -e's/\n/\\n/g')
         BODY=$(echo "$BODY" | \
-            sed -e"s/^{include \\\"$(echo $INCLUDE | sed -e's/\//\\\//g' -e's/&/\\\&/g')\\\"}/$(echo $INCLUDE_BODY | sed -e's/\//\\\//g' -e's/&/\\\&/g')/")
+            sed -e"s/^{include \\\"$(echo $INCLUDE | sed -e's/\//\\\//g' -e's/&/\\\&/g')\\\"}/$INCLUDE_BODY/")
         INCLUDE=$(echo "$BODY" | \
             sed -e'/^{include/s/.*{include \"\([.\/a-z0-9_ -]\+\)\"}.*/\1/;t;d' | \
             sed 1q)
@@ -180,18 +185,26 @@ done
 [ -f $INFILE ] || throw "$INFILE not present"
 
 declare -A VARS
-VAR_KEYS=$(grep '\([a-z-]\+\): \(.*\)' $INFILE | \
-    sed -e's/\([a-z-]\+\): \(.*\)/\1/g')
-for key in $VAR_KEYS; do
-    VARS[$key]=$(grep "$key:" $INFILE | \
-        sed -e "s/$key: \(.*\)/\1/g") 
-done
+
+if [ $BODY_ONLY -eq 0 ]; then
+    VAR_KEYS=$(sed '/^---/,$d' $INFILE | \
+        sed -e's/^\([a-z-]\+\):.*$/\1/g')
+    for key in $VAR_KEYS; do
+        VARS[$key]=$(sed '/^---/,$d' $INFILE | grep -e "^$key:" | \
+            sed -e "s/^$key: \(.*\)$/\1/g") 
+    done
+fi
+
 
 #echo -n Generating ${VARS[site-name]}: ${VARS[site-desc]}...
 
-grep -- '^---' $INFILE 2>&1 >/dev/null \
-    && DOC=$(sed '0,/^---/d' $INFILE) \
-    || DOC=$(cat $INFILE)
+if [ $BODY_ONLY -eq 0 ]; then
+    grep -- '^---' $INFILE 2>&1 >/dev/null \
+        && DOC=$(sed '0,/^---/d' $INFILE) \
+        || DOC=$(cat $INFILE)
+else
+    DOC=$(cat $INFILE)
+fi
 
 CSSHREF=$CSSFILE
 INDIR=$(dirname $INFILE 2>/dev/null)

@@ -1,0 +1,84 @@
+site-name: slweb - Simple static website generator. 
+---
+{main}
+# slweb
+
+**Slweb** is a static website generator which aims at being simplistic. It uses
+**sed**(1) to transform a custom Markdown-like syntax into HTML.
+
+## Install
+
+```
+$ git clone https://github.com/Strahinja/slweb.git 
+$ cd slweb 
+$ make && sudo make install
+```
+
+## Examples
+
+See the `[examples/](https://github.com/Strahinja/slweb/tree/master/examples)` directory in this repository.
+
+GIven the file `index.slw` in the current directory:
+
+```
+site-name: Test website
+site-desc: My first website in slweb
+---
+\
+\{main}
+\# Hello world
+\
+This is an \_example_ of a statically generated HTML.
+\
+\{/main}
+```
+
+after using the command:
+
+```
+$ slweb index.slw > index.html
+```
+
+file `index.html` contains:
+
+```
+&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+&lt;head&gt;
+    &lt;title&gt;Test website&lt;/title&gt;
+    &lt;meta charset="utf8" /&gt;
+    &lt;meta name="viewport" content="width=device-width, initial-scale=1" /&gt;
+    &lt;meta name="generator" content="slweb" /&gt;
+&lt;/head&gt;
+&lt;body&gt;
+\
+&lt;main&gt;
+&lt;h1&gt;Hello world&lt;/h1&gt;
+\
+&lt;p&gt;This is an &lt;em&gt;example&lt;/em&gt; of a statically generated HTML.&lt;/p&gt;
+\
+&lt;/main&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+```
+
+## License
+
+slweb - Simple static website generator. 
+Copyright (C) 2020  Страхиња Радић 
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version. 
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU General Public License for more details. 
+
+You should have received a copy of the GNU General Public License along with
+this program. If not, see &lt;https://www.gnu.org/licenses/&gt;. 
+
+{made-by}
+{/main}
+
