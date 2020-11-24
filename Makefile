@@ -34,8 +34,8 @@ slweb: slweb.in
 
 examples: ${EXAMPLE_PAGES_HTML}
 
-view: examples
-	$(BROWSER)	examples/basic/index.html
+view: index.html
+	$(BROWSER)	index.html
 
 doc: slweb.pdf slweb.1.gz
 
