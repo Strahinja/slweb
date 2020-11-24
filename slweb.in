@@ -170,7 +170,8 @@ EOT
 )
 GITLOG=$(cat <<EOT | sed -e's/\//\\\//g' -e"s/\"/\\\\\"/g" | sed -z -e's/\n/\\n/g'
 <div id="git-log">
-$(git log --pretty=format:"$(basename $INFILE) %h %ci (%cn) %d" \
+Previous commit:
+$(git log -1 --pretty=format:"$(basename $INFILE) %h %ci (%cn) %d" \
     $INFILE 2>/dev/null || echo "(Not in a Git repository)")
 </div><!--git-log-->
 EOT

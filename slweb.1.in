@@ -125,9 +125,15 @@ include the resulting
 .SM HTML. Directive needs to start at the beginning of the line.
 .
 .IP \[bu]
+.BR "Previous Git commit information" .
+Directive \fC{git\-log}\fR is converted into a div with the id \fCgit\-log\fR
+containing the information about the previous commit (as having information
+about the current commit would be impossible).
+.
+.IP \[bu]
 .BR "Brand \[lq]watermark\[rq]" .
-Directive \fC{made-by}\fR is converted into a div containing the
-\[lq]watermark\[rq] text and a link to the
+Directive \fC{made\-by}\fR is converted into a div with the id \fCmade\-by\fR
+containing the \[lq]watermark\[rq] text and a link to the
 .B slweb
 home page.
 .
