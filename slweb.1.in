@@ -135,7 +135,8 @@ Directive \fC{include "somefile"}\fR will run \fCslweb -b\fR on
 .I somefile.slw
 (related to the directory containing the file containing the directive) and
 include the resulting
-.SM HTML. Directive needs to start at the beginning of the line.
+.SM HTML.
+Directive needs to start at the beginning of the line.
 .
 .IP \[bu]
 .BR "Previous Git commit information" .
