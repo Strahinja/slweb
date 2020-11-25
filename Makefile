@@ -1,9 +1,9 @@
-SLWVERSION = v0.2.2-beta
-SLWDATE = 23 Nov 2020
+SLWVERSION = v0.2.3-beta
+SLWDATE = 25 Nov 2020
 BINDIR = /usr/local/bin
 MANDIR = /usr/local/share/man/man1
 BROWSER = surf
-EXAMPLE_PAGES = $(addsuffix /index.slw,examples/basic examples/includes)
+EXAMPLE_PAGES = $(addsuffix /index.slw,examples/basic examples/includes examples/tags)
 #EXAMPLE_PAGES += $(addprefix examples/includes,
 EXAMPLE_PAGES_HTML = $(EXAMPLE_PAGES:.slw=.html)
 

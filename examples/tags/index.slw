@@ -1,0 +1,15 @@
+site-name: Tag test
+---
+{test}Tag test{/test}
+
+{test.class mysecondclass selected}Selected text{/test}
+
+{test#firstid}First id{/test}
+
+{test#secondid.class}Second id{/test}
+
+{test.class#thirdid}
+	{#someid}Some id{/#someid}
+	{.someclass}Some class{/.someclass}
+{/test}
+
