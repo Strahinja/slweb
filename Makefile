@@ -1,5 +1,5 @@
-SLWVERSION = v0.2.3-beta
-SLWDATE = 25 Nov 2020
+SLWVERSION = v0.2.4-beta
+SLWDATE = 1 Dec 2020
 BINDIR = /usr/local/bin
 MANDIR = /usr/local/share/man/man1
 BROWSER = surf
@@ -53,5 +53,7 @@ uninstall:
 clean: 
 	rm	-f slweb.1.gz slweb.pdf index.html $(EXAMPLE_PAGES_HTML) slweb slweb.1	2>/dev/null
 
-.PHONY: in examples view doc install uninstall clean
+rebuild: clean all
+
+.PHONY: in examples view doc install uninstall clean rebuild
 

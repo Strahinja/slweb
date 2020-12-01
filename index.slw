@@ -1,4 +1,5 @@
 site-name: slweb - Simple static website generator. 
+stylesheet: index.css
 ---
 {main}
 # slweb
@@ -47,6 +48,7 @@ file `index.html` contains:
 &lt;head&gt;
     &lt;title&gt;Test website&lt;/title&gt;
     &lt;meta charset="utf8" /&gt;
+    &lt;meta name="description" content="My first website in slweb" /&gt;
     &lt;meta name="viewport" content="width=device-width, initial-scale=1" /&gt;
     &lt;meta name="generator" content="slweb" /&gt;
 &lt;/head&gt;

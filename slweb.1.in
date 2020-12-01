@@ -93,6 +93,12 @@ line, both backticks need to be on the same line).
 .BR "Links (limited)" .
 The construct \fC[A link](https://example.com)\fR will be converted into \fC<a
 href="https://example.com">A link</a>\fR.
+
+Special case is the form \fC[=somemacro Link title](https://anything)\fR which
+prepends the body of a macro
+.I somemacro
+into the \fC<a></a>\fR tag. See
+.BR Macros .
 .
 .IP \[bu]
 .BR "Line breaks" .
@@ -138,6 +144,15 @@ include the resulting
 .SM HTML.
 Directive needs to start at the beginning of the line.
 .
+.IP \[bu] 4
+.BR Macros .
+Macros can be declared using the directive \fC{=macroname}{/=macroname}\fR,
+where
+.I macroname
+is the name of the macro. Anything between those two tags will then become the
+body of a macro. Whenever \fC{=macroname}\fR is subsequently encountered in the
+file, it will be replaced by the macro body.
+.
 .IP \[bu]
 .BR "Previous Git commit information" .
 Directive \fC{git\-log}\fR is converted into a div with the id \fCgit\-log\fR
@@ -150,6 +165,21 @@ Directive \fC{made\-by}\fR is converted into a div with the id \fCmade\-by\fR
 containing the \[lq]watermark\[rq] text and a link to the
 .B slweb
 home page.
+.
+.PP
+.B Special YAML variables
+supported by slweb are:
+.
+.IP \[bu] 4
+.BR site-name .
+The contents of this variable will be inserted inside the \fC<title></title>\fR
+tags.
+.
+.IP \[bu] 4
+.BR site-desc .
+Ths contents of this variable will be inserted as the value of the
+.I content
+attribute of the \fC<meta name="description">\fR tag.
 .
 .SH "SEE ALSO"
 .BR sed (1)
@@ -191,6 +221,7 @@ file \fCindex.html\fR contains:
 <head>
     <title>Test website</title>
     <meta charset="utf8" />
+    <meta name="description" content="My first website in slweb" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="generator" content="slweb" />
 </head>

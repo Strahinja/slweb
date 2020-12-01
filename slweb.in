@@ -1,7 +1,6 @@
 #!/bin/bash
 
 BODY_ONLY=0
-CSSFILE=index.css
 INFILE=index.slw
 OUTFILE=index.html
 VERSION=%VERSION%
@@ -55,6 +54,7 @@ function head()
 cat <<EOT
     <title>${VARS[site-name]}</title>
     <meta charset="utf8" />
+    <meta name="description" content="${VARS[site-desc]}" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="generator" content="slweb" />
 EOT
@@ -117,7 +117,7 @@ function body()
             -e 's/^{#\([a-z0-9-]\+\)\.\([a-z 0-9-]\+\)}/<div id="\1" class="\2">/g' \
             -e 's/\([^\\]\){#\([a-z0-9-]\+\)\.\([a-z 0-9-]\+\)}/\1<div id="\2" class="\3">/g' \
             -e 's/\\\({#[a-z0-9-]\+\.[a-z0-9-]\+}\)/\1/g' \
-            -e 's/^{\.\([a-z 0-9-]\+\)}/<div class="\1"/g'  \
+            -e 's/^{\.\([a-z 0-9-]\+\)}/<div class="\1">/g'  \
             -e 's/\([^\\]\){\.\([a-z0-9-]\+\)}/\1<div class="\2">/g'  \
             -e 's/\\\({\.[a-z0-9-]\+}\)/\1/g'  \
             -e 's/^{#\([a-z0-9-]\+\)}/<div id="\1">/g'  \
@@ -148,9 +148,13 @@ function body()
             -e 's/\([^\\]\){\/#\([a-z0-9-]\+\)}/\1<\/div><!--#\2-->/g'  \
             -e 's/\\\({\/#[a-z0-9-]\+}\)/\1/g'  \
             -e 's/ $/<br \/>/g' \
+            -e "s/^\\[=\\(\\S\\+\\) \\([^]]\\+\\)\\](\\([a-z]\+:\/\/[^)]\\+\\))/<a href=\"\\3\">\\{=\\1\\}\\2<\\/a>/g" \
+            -e "s/\\([^\\\\]\\)\\[=\\(\\S\\+\\) \\([^]]\\+\\)\\](\\([a-z]\+:\/\/[^)]\\+\\))/\\1<a href=\"\\4\">\\{=\\2\\}\\3<\\/a>/g" \
             -e "s/^\\[\\([^]]\\+\\)\\](\\([a-z]\+:\/\/[^)]\\+\\))/<a href=\"\\2\">\\1<\\/a>/g" \
             -e "s/\\([^\\\\]\\)\\[\\([^]]\\+\\)\\](\\([a-z]\+:\/\/[^)]\\+\\))/\\1<a href=\"\\3\">\\2<\\/a>/g" \
             -e 's/\\\(\[[^]]\+\]([a-z]\+:\/\/[^)]\+)\)/\1/g' \
+            -e "s/^\\[=\\(\\S\\+\\) \\([^]]\\+\\)\\](\\([^)]\\+\\))/<a href=\"$(realpath --relative-to=$BASEDIR $(dirname $INFILE) | sed -e's/\//\\\//g' -e's/&/\\\&/g')\/\\3\">\\{=\\1\\}\\2<\\/a>/g" \
+            -e "s/\\([^\\\\]\\)\\[=\\(\\S\\+\\) \\([^]]\\+\\)\\](\\([^)]\\+\\))/\\1<a href=\"$(realpath --relative-to=$BASEDIR $(dirname $INFILE) | sed -e's/\//\\\//g' -e's/&/\\\&/g')\/\\4\">\\{=\\2\\}\\3<\\/a>/g" \
             -e "s/^\\[\\([^]]\\+\\)\\](\\([^)]\\+\\))/<a href=\"$(realpath --relative-to=$BASEDIR $(dirname $INFILE) | sed -e's/\//\\\//g' -e's/&/\\\&/g')\/\\2\">\\1<\\/a>/g" \
             -e "s/\\([^\\\\]\\)\\[\\([^]]\\+\\)\\](\\([^)]\\+\\))/\\1<a href=\"$(realpath --relative-to=$BASEDIR $(dirname $INFILE) | sed -e's/\//\\\//g' -e's/&/\\\&/g')\/\\3\">\\2<\\/a>/g" \
             -e 's/\\\(\[[^]]\+\]([^)]\+)\)/\1/g')
@@ -161,12 +165,19 @@ function body()
 
     while [ -n "$INCLUDE" ]; do
         INCLUDE_BODY=$($0 -b -d $(dirname $INFILE) "$(dirname $INFILE)/$INCLUDE.slw" | \
-		sed -z -e's/\//\\\//g' -e's/&/\\\&/g' -e's/\n/\\n/g')
+            sed -z -e's/\//\\\//g' -e's/"/\\"/g' -e's/&/\\\&/g' -e's/\n/\\n/g')
         BODY=$(echo "$BODY" | \
             sed -e"s/^{include \\\"$(echo $INCLUDE | sed -e's/\//\\\//g' -e's/&/\\\&/g')\\\"}/$INCLUDE_BODY/")
         INCLUDE=$(echo "$BODY" | \
             sed -e'/^{include/s/.*{include \"\([.\/a-z0-9_ -]\+\)\"}.*/\1/;t;d' | \
             sed 1q)
+    done
+
+    for macro_name in $MACRO_NAMES; do
+        MACRO_BODY=$(echo "${MACROS[$macro_name]}" | \
+            sed -z -e's/\//\\\//g' -e's/"/\\"/g' -e's/&/\\\&/g' -e's/\n/\\n/g')
+        BODY=$(echo "$BODY" | \
+            sed -e "s/{=$macro_name}/$MACRO_BODY/g")
     done
     echo "$BODY"
 }
@@ -216,16 +227,18 @@ done
 declare -A VARS
 
 if [ $BODY_ONLY -eq 0 ]; then
-    VAR_KEYS=$(sed '/^---/,$d' $INFILE | \
+    YAML=$(sed '/^---/,$d' $INFILE)
+    VAR_KEYS=$(echo "$YAML" | \
         sed -e's/^\([a-z-]\+\):.*$/\1/g')
     for key in $VAR_KEYS; do
         VARS[$key]=$(sed '/^---/,$d' $INFILE | grep -e "^$key:" | \
             sed -e "s/^$key: \(.*\)$/\1/g") 
     done
+    CSSFILES=$(echo "$YAML" | \
+        grep ^stylesheet | \
+        sed -e 's/stylesheet: \(.*\)/\1/g')
 fi
-
-
-#echo -n Generating ${VARS[site-name]}: ${VARS[site-desc]}...
+INDIR=$(dirname $INFILE 2>/dev/null)
 
 if [ $BODY_ONLY -eq 0 ]; then
     grep -- '^---' $INFILE 2>&1 >/dev/null \
@@ -235,16 +248,24 @@ else
     DOC=$(cat $INFILE)
 fi
 
-CSSHREF=$CSSFILE
-INDIR=$(dirname $INFILE 2>/dev/null)
-[ "$INDIR" != "." ] && CSSHREF=$CSSFILE
-#echo CSSHREF=$CSSHREF >&2
+declare -A MACROS
+MACRO_NAMES=$(sed -e 's/{=\(\S\+\)}/\1/g;t;d' $INFILE)
+for macro_name in $MACRO_NAMES; do
+    MACROS[$macro_name]=$(echo "$DOC" | \
+        grep -zo "{=$macro_name}\\(.*\\){\\/=$macro_name}" | tr -d '\0' | \
+        sed -ze "s/{=$macro_name}\\(.*\\){\\/=$macro_name}/\\1/g")
+    DOC=$(echo "$DOC" | \
+        sed -ze "s/\s*{=$macro_name}\\(.*\\){\\/=$macro_name}\s*//g")
+done
 
 if [ $BODY_ONLY -eq 0 ]; then
     begin_html
     begin_head
     head
-    [ -f $INDIR/$CSSFILE ] && add_css $CSSHREF
+    for CSSFILE in $CSSFILES; do
+        [ -f $INDIR/$CSSFILE ] && add_css $CSSFILE \
+            || echo "$INDIR/$CSSFILE not found"
+    done
     end_head
     begin_body
 fi
@@ -254,4 +275,3 @@ if [ $BODY_ONLY -eq 0 ]; then
     end_html
 fi
 
-#echo done.
