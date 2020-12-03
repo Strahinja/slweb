@@ -21,7 +21,7 @@ pre
 {
     padding: 1em;
     line-height: 1.2em;
-    overflow-x: scroll;
+    overflow-x: auto;
 }
 
 main
