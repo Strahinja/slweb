@@ -1,21 +1,21 @@
 ## OPTIONS
 
-**-b** 
-**--body-only** 
+**-b**  
+**--body-only**  
 Only add the contents of the `&lt;body&gt;` tag, skipping
 `&lt;html&gt;` and
 `&lt;head&gt;`.
 
-**-d** 
-**--basedir &lt;_directory_&gt;** 
+**-d**  
+**--basedir &lt;_directory_&gt;**  
 Set the base directory as a reference point to normalize paths in local links
 (the argument to **--relative-to** option for the **realpath** (1) command).
 
-**-h** 
-**--help** 
+**-h**  
+**--help**  
 Print this usage information screen.
 
-**-v** 
-**--version** 
+**-v**  
+**--version**  
 Print program version and exit.
 

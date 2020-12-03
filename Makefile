@@ -1,5 +1,5 @@
-SLWVERSION = v0.2.4-beta
-SLWDATE = 1 Dec 2020
+SLWVERSION = v0.2.5-beta
+SLWDATE = 3 Dec 2020
 BINDIR = /usr/local/bin
 MANDIR = /usr/local/share/man/man1
 BROWSER = surf

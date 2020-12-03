@@ -3,72 +3,72 @@
 Files processed by **slweb** are using a minimal subset of Markdown with added
 directives.  Supported **Markdown features** are:
 
-<ul>
-<li>
+{ul}
+{li}
 **Paragraphs.**
 Text surrounded by newlines will be put inside `&lt;p&gt;&lt;/p&gt;` tags.
-</li>
-<li>
+{/li}
+{li}
 **Headings.**
 A line starting with `#` followed by space will be put inside
 `&lt;h?&gt;&lt;/h?&gt;`, where
 `?` stands for 1-4, depending on the number of
 hashtags.
-</li>
-<li>
+{/li}
+{li}
 **Bold/italic (limited).**
 Text inside `\*asterisks\*` or
 `\_underlines\_` will be put inside
 `&lt;em&gt;&lt;/em&gt;`. Text inside
 `\*\*double asterisks\*\*` will be put inside
 `&lt;strong&gt;&lt;/strong&gt;`.
-</li>
-<li>
+{/li}
+{li}
 **Backticks.**
 Text inside `\`backticks\`` will be put inside
 `&lt;code&gt;&lt;/code&gt;` (one per line, both backticks need to be on the same line).
-</li>
-<li>
+{/li}
+{li}
 **Links (limited).**
 The construct `\[A link](https://example.com)` will be converted into
 `&lt;a href="https://example.com"&gt;A link&lt;/a&gt;`.
-</li>
-<li>
+{/li}
+{li}
 **Line breaks.**
 Space followed by a newline will be turned into `&lt;br /&gt;`.
-</li>
-</ul>
+{/li}
+{/ul}
 
 
 **Directives** include:
 
-<ul>
-<li>
+{ul}
+{li}
 **Class divs.**
 Directive `\{.myclass}\{/.myclass}` will be transformed into
 `&lt;div class="myclass"&gt;&lt;/div&gt;`.
-</li>
-<li>
+{/li}
+{li}
 **Id divs.**
 Directive `\{#myid}\{/#myid}` will be transformed into
 `&lt;div id="myid"&gt;&lt;/div&gt;`.
-</li>
-<li>
+{/li}
+{li}
 **General tags.**
 Directive `\{sometag}\{/sometag}` will be transformed into
 `&lt;sometag&gt;&lt;/sometag&gt;`.
-</li>
-<li>
+{/li}
+{li}
 **Includes.**
 Directive `\{include "somefile"}` will run
 `slweb -b` on _somefile.slw_ (related
 to the directory containing the file containing the directive) and include the
 resulting {abbr}HTML{/abbr}. Directive needs to start at the beginning of the line.
-</li>
-<li>
+{/li}
+{li}
 **Brand &ldquo;watermark&rdquo;.**
 Directive `\{made-by}` is converted into a div containing the
 &ldquo;watermark&rdquo; text and a link to the **slweb** home page.
-</li>
-</ul>
+{/li}
+{/ul}
 

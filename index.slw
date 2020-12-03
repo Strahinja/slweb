@@ -1,4 +1,5 @@
 site-name: slweb - Simple static website generator. 
+site-desc: Simple static website generator
 stylesheet: index.css
 ---
 {main}
@@ -10,8 +11,8 @@ stylesheet: index.css
 ## Install
 
 ```
-$ git clone https://github.com/Strahinja/slweb.git 
-$ cd slweb 
+$ git clone https://github.com/Strahinja/slweb.git
+$ cd slweb
 $ make && sudo make install
 ```
 
@@ -19,7 +20,7 @@ $ make && sudo make install
 
 See the `[examples/](https://github.com/Strahinja/slweb/tree/master/examples)` directory in this repository.
 
-GIven the file `index.slw` in the current directory:
+Given the file `index.slw` in the current directory:
 
 ```
 site-name: Test website
@@ -66,8 +67,8 @@ file `index.html` contains:
 
 ## License
 
-slweb - Simple static website generator. 
-Copyright (C) 2020  Страхиња Радић 
+slweb - Simple static website generator.  
+Copyright (C) 2020  Страхиња Радић
 
 This program is free software: you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software

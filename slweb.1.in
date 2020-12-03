@@ -99,10 +99,28 @@ prepends the body of a macro
 .I somemacro
 into the \fC<a></a>\fR tag. See
 .BR Macros .
+
+Also, the form \fC[(Link title)](http://asite.com)\fR will surround the link
+title (text between \fC<a></a>\fR tags) with \fC<span></span>\fR, like so:
+.EX
+.in +4
+<a href="http://asite.com"><span>Link title</span></a>
+.EE
+.in -4
+This allows for separate styling of link text. It can be combined with the
+macro-form:
+.EX
+.in +4
+[=somemacro (Link title)](http://asite.com)
+.EE
+.in -4
+It will prepend the body of a macro
+.I somemacro
+outside of the \fC<span></span>\fR.
 .
 .IP \[bu]
 .BR "Line breaks" .
-Space followed by a newline will be turned into \fC<br />\fR.
+Two spaces followed by a newline will be turned into \fC<br />\fR.
 .
 .PP
 .BR "Directives " include:
@@ -177,9 +195,15 @@ tags.
 .
 .IP \[bu] 4
 .BR site-desc .
-Ths contents of this variable will be inserted as the value of the
+The contents of this variable will be inserted as the value of the
 .I content
 attribute of the \fC<meta name="description">\fR tag.
+.
+.IP \[bu] 4
+.BR stylesheet .
+The contents of this variable will be treated as a
+.sm CSS
+file name to be included using the \fC<link rel="stylesheet" />\fR tag.
 .
 .SH "SEE ALSO"
 .BR sed (1)

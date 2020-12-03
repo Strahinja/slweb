@@ -7,7 +7,6 @@
 *.ps
 *.swp
 nohup.out
-*.png
 *.gz
 slweb
 slweb.1
