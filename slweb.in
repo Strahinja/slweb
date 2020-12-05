@@ -243,6 +243,8 @@ if [ $BODY_ONLY -eq 0 ]; then
         sed -e 's/stylesheet: \(.*\)/\1/g')
 fi
 INDIR=$(dirname $INFILE 2>/dev/null)
+echo INDIR = $INDIR
+echo INFILE = $INFILE
 
 if [ $BODY_ONLY -eq 0 ]; then
     grep -- '^---' $INFILE 2>&1 >/dev/null \
@@ -261,6 +263,20 @@ for macro_name in $MACRO_NAMES; do
     DOC=$(echo "$DOC" | \
         sed -ze "s/\s*{=$macro_name}\\(.*\\){\\/=$macro_name}\s*//g")
 done
+
+DIR_COMMANDS=$(echo "$DOC" | grep '{dir \"[^\"]*\" \"[^\"]*\"}')
+shopt -s extglob
+shopt -p extglob
+#shopt -s nullglob
+while IFS= read -r DIR_COMMAND; do
+    FORMAT=$(echo "$DIR_COMMAND" | \
+        sed -e 's/{dir \"\([^\"]*\)\" \"[^\"]*\"}/\1/g')
+    DIR_PATTERN=$INDIR/$(echo "$DIR_COMMAND" | \
+        sed -e 's/{dir \"[^\"]*\" \"\([^\"]*\)\"}/\1/g')
+    set -x
+    find $INDIR -regextype sed -regex "$DIR_PATTERN/*.slw" -print
+    set +x
+done <<< "$DIR_COMMANDS"
 
 if [ $BODY_ONLY -eq 0 ]; then
     begin_html
