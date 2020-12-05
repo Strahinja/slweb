@@ -1,4 +1,5 @@
 #!/bin/bash
+#set -x
 
 BODY_ONLY=0
 INFILE=index.slw
@@ -230,7 +231,8 @@ done
 
 declare -A VARS
 
-if [ $BODY_ONLY -eq 0 ]; then
+HAS_YAML=$(grep -- '^---' "$INFILE" 2>/dev/null)
+if [ $BODY_ONLY -eq 0 -a -n "$HAS_YAML" ]; then
     YAML=$(sed '/^---/,$d' $INFILE)
     VAR_KEYS=$(echo "$YAML" | \
         sed -e's/^\([a-z-]\+\):.*$/\1/g')
@@ -243,8 +245,6 @@ if [ $BODY_ONLY -eq 0 ]; then
         sed -e 's/stylesheet: \(.*\)/\1/g')
 fi
 INDIR=$(dirname $INFILE 2>/dev/null)
-echo INDIR = $INDIR
-echo INFILE = $INFILE
 
 if [ $BODY_ONLY -eq 0 ]; then
     grep -- '^---' $INFILE 2>&1 >/dev/null \
@@ -266,16 +266,36 @@ done
 
 DIR_COMMANDS=$(echo "$DOC" | grep '{dir \"[^\"]*\" \"[^\"]*\"}')
 shopt -s extglob
-shopt -p extglob
 #shopt -s nullglob
 while IFS= read -r DIR_COMMAND; do
     FORMAT=$(echo "$DIR_COMMAND" | \
         sed -e 's/{dir \"\([^\"]*\)\" \"[^\"]*\"}/\1/g')
-    DIR_PATTERN=$INDIR/$(echo "$DIR_COMMAND" | \
+    DIR_PATTERN=$(echo "$DIR_COMMAND" | \
         sed -e 's/{dir \"[^\"]*\" \"\([^\"]*\)\"}/\1/g')
-    set -x
-    find $INDIR -regextype sed -regex "$DIR_PATTERN/*.slw" -print
-    set +x
+    DIR_FILES=$(cd $INDIR; \
+        find . -regextype sed -regex "\.\/$DIR_PATTERN\/.*\.slw" -print)
+    FORMAT=$(echo "$FORMAT" | \
+        sed -e 's/\//\\\//g' -e 's/\"/\\\"/g')
+    DIR_PATTERN=$(echo "$DIR_PATTERN" | \
+        sed -e 's/\//\\\//g' -e 's/\"/\\\"/g' -e 's/\*/\\\*/g' \
+            -e 's/\./\\\./g' -e 's/\[/\\\[/g' -e 's/\]/\\\]/g')
+    DIR_HTML="<ul class=\"dir\">\n"
+    while IFS= read -r DIR_FILE; do
+        DIR_FILE_HTML=$(echo "$DIR_FILE" | \
+            sed -e's/\.slw/\.html/g')
+        HAS_YAML=$(grep -- '^---' "$INDIR/$DIR_FILE" 2>/dev/null)
+        if [ -n "$HAS_YAML" ]; then
+            DATE=$(sed '/^---/,$d' $INDIR/$DIR_FILE | \
+                grep -e'^date:' | sed -e 's/^date: \(.*\)$/\1/g')
+            DIR_HTML="$DIR_HTML\n<li><a href=\"$DIR_FILE_HTML\">$DATE</a></li>\n"
+        fi
+    done <<< "$DIR_FILES"
+    DIR_HTML="$DIR_HTML\n</ul><!--dir-->\n"
+    DIR_HTML=$(echo "$DIR_HTML" | \
+        sed -e's/\//\\\//g' -e's/\[/\\\[/g' -e's/\./\\\./g' \
+            -e's/\"/\\\"/g')
+    DOC=$(echo "$DOC" | \
+        sed -e "s/{dir \"$FORMAT\" \"$DIR_PATTERN\"}/$DIR_HTML/g")
 done <<< "$DIR_COMMANDS"
 
 if [ $BODY_ONLY -eq 0 ]; then
