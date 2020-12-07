@@ -5,6 +5,7 @@ BODY_ONLY=0
 INFILE=index.slw
 OUTFILE=index.html
 VERSION=%VERSION%
+LSDIRS_MAX_SUBDIRS=5
 
 function throw()
 {
@@ -232,9 +233,10 @@ done
 declare -A VARS
 
 HAS_YAML=$(grep -- '^---' "$INFILE" 2>/dev/null)
-if [ $BODY_ONLY -eq 0 -a -n "$HAS_YAML" ]; then
+if [ -n "$HAS_YAML" ]; then
     YAML=$(sed '/^---/,$d' $INFILE)
     VAR_KEYS=$(echo "$YAML" | \
+        grep '^[a-z-]\+:.*' | \
         sed -e's/^\([a-z-]\+\):.*$/\1/g')
     for key in $VAR_KEYS; do
         VARS[$key]=$(sed '/^---/,$d' $INFILE | grep -e "^$key:" | \
@@ -246,13 +248,66 @@ if [ $BODY_ONLY -eq 0 -a -n "$HAS_YAML" ]; then
 fi
 INDIR=$(dirname $INFILE 2>/dev/null)
 
-if [ $BODY_ONLY -eq 0 ]; then
+#if [ $BODY_ONLY -eq 0 ]; then
     grep -- '^---' $INFILE 2>&1 >/dev/null \
-        && DOC=$(sed '0,/^---/d' $INFILE) \
+        && DOC="$(echo; sed '0,/^---/d' $INFILE)" \
         || DOC=$(cat $INFILE)
-else
-    DOC=$(cat $INFILE)
-fi
+#else
+    #DOC=$(cat $INFILE)
+#fi
+
+lsdirs_commands=$(echo "$DOC" | \
+    grep -e '{lsdirs\( [0-9]\+\)\?}' \
+        -e '{lsdirs\( [0-9]\+\)\? =[^}]\+}')
+shopt -s extglob
+#shopt -s nullglob
+lsdirs_subdir_count=$(echo "$lsdirs_commands" | \
+    sed -e 's/{lsdirs\( \([0-9]\+\)\)\?}/\2/g' \
+        -e 's/{lsdirs\( \([0-9]\+\)\)\? =[^}]\+}/\2/g')
+lsdirs_subdir_count=${lsdirs_subdir_count:=$LSDIRS_MAX_SUBDIRS}
+lsdirs_subdirs=$(cd $INDIR; \
+    find . -mindepth 1 -type d -print | sort -r)
+while IFS= read -r lsdirs_command; do
+    [ -z "$lsdirs_command" ] && continue
+    lsdirs_macroname=$(echo "$lsdirs_command" | \
+        grep '{lsdirs\( [0-9]\+\)\? =[^}]\+}' | \
+        sed -e 's/{lsdirs\( [0-9]\+\)\? =\([^}]\+\)}/\2/g')
+    lsdirs_html="<ul class=\"dir\">\n"
+    details_open=" open"
+    while IFS= read -r lsdirs_subdir; do
+        [ $lsdirs_subdir_count -le 0 ] && break
+        lsdirs_subdir_count=$(($lsdirs_subdir_count-1))
+        [ -z "$lsdirs_subdir" ] && continue
+        lsdirs_html="$lsdirs_html\n<li>\n<details${details_open}>\n\
+            <summary>"
+        if [ -n "$lsdirs_macroname" ]; then
+            lsdirs_html="$lsdirs_html{=$lsdirs_macroname}"
+        fi
+        lsdirs_html="$lsdirs_html$(basename "$lsdirs_subdir")\
+            </summary>\n\
+            <div>\n"
+
+        lsdirscontent_files=$(cd $INDIR; \
+            find $lsdirs_subdir -mindepth 1 -name '*.slw' -print)
+        while IFS= read -r lsdirscontent_file; do
+            [ -z "$lsdirscontent_file" ] && continue
+            lsdirs_html="$lsdirs_html\
+                $($0 -b -d $INDIR $INDIR/$lsdirscontent_file)"
+        done <<< "$lsdirscontent_files"
+
+        lsdirs_html="$lsdirs_html\
+            </div>\n\
+            </details>\n</li>\n"
+        details_open=""
+    done <<< "$lsdirs_subdirs"
+    lsdirs_html="$lsdirs_html\n</ul><!--dir-->\n"
+    lsdirs_html=$(echo "$lsdirs_html" | \
+        sed -z -e's/\//\\\//g' -e's/\[/\\\[/g' -e's/\]/\\\]/g' -e's/\./\\\./g' \
+            -e's/\"/\\\"/g' -e's/\n/\\n/g')
+    DOC=$(echo "$DOC" | \
+        sed -e "s/$lsdirs_command/$lsdirs_html/g")
+done <<< "$lsdirs_commands"
+
 
 declare -A MACROS
 MACRO_NAMES=$(sed -e 's/{=\(\S\+\)}/\1/g;t;d' $INFILE)
@@ -263,40 +318,6 @@ for macro_name in $MACRO_NAMES; do
     DOC=$(echo "$DOC" | \
         sed -ze "s/\s*{=$macro_name}\\(.*\\){\\/=$macro_name}\s*//g")
 done
-
-DIR_COMMANDS=$(echo "$DOC" | grep '{dir \"[^\"]*\" \"[^\"]*\"}')
-shopt -s extglob
-#shopt -s nullglob
-while IFS= read -r DIR_COMMAND; do
-    FORMAT=$(echo "$DIR_COMMAND" | \
-        sed -e 's/{dir \"\([^\"]*\)\" \"[^\"]*\"}/\1/g')
-    DIR_PATTERN=$(echo "$DIR_COMMAND" | \
-        sed -e 's/{dir \"[^\"]*\" \"\([^\"]*\)\"}/\1/g')
-    DIR_FILES=$(cd $INDIR; \
-        find . -regextype sed -regex "\.\/$DIR_PATTERN\/.*\.slw" -print)
-    FORMAT=$(echo "$FORMAT" | \
-        sed -e 's/\//\\\//g' -e 's/\"/\\\"/g')
-    DIR_PATTERN=$(echo "$DIR_PATTERN" | \
-        sed -e 's/\//\\\//g' -e 's/\"/\\\"/g' -e 's/\*/\\\*/g' \
-            -e 's/\./\\\./g' -e 's/\[/\\\[/g' -e 's/\]/\\\]/g')
-    DIR_HTML="<ul class=\"dir\">\n"
-    while IFS= read -r DIR_FILE; do
-        DIR_FILE_HTML=$(echo "$DIR_FILE" | \
-            sed -e's/\.slw/\.html/g')
-        HAS_YAML=$(grep -- '^---' "$INDIR/$DIR_FILE" 2>/dev/null)
-        if [ -n "$HAS_YAML" ]; then
-            DATE=$(sed '/^---/,$d' $INDIR/$DIR_FILE | \
-                grep -e'^date:' | sed -e 's/^date: \(.*\)$/\1/g')
-            DIR_HTML="$DIR_HTML\n<li><a href=\"$DIR_FILE_HTML\">$DATE</a></li>\n"
-        fi
-    done <<< "$DIR_FILES"
-    DIR_HTML="$DIR_HTML\n</ul><!--dir-->\n"
-    DIR_HTML=$(echo "$DIR_HTML" | \
-        sed -e's/\//\\\//g' -e's/\[/\\\[/g' -e's/\./\\\./g' \
-            -e's/\"/\\\"/g')
-    DOC=$(echo "$DOC" | \
-        sed -e "s/{dir \"$FORMAT\" \"$DIR_PATTERN\"}/$DIR_HTML/g")
-done <<< "$DIR_COMMANDS"
 
 if [ $BODY_ONLY -eq 0 ]; then
     begin_html
@@ -309,6 +330,7 @@ if [ $BODY_ONLY -eq 0 ]; then
     end_head
     begin_body
 fi
+[ -n "${VARS[title]}" ] && echo "<h2>${VARS[title]}</h2>"
 body "$DOC"
 if [ $BODY_ONLY -eq 0 ]; then
     end_body

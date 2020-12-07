@@ -171,6 +171,48 @@ is the name of the macro. Anything between those two tags will then become the
 body of a macro. Whenever \fC{=macroname}\fR is subsequently encountered in the
 file, it will be replaced by the macro body.
 .
+.IP \[bu] 4
+.BR "Subdirectory inclusion (blogging directive)" .
+The command \fC{lsdirs \fInum\fC =\fImacroname\fC}\fR
+.RI ( num
+and
+.I macroname
+are optional) will be expanded as follows:
+.
+.RS
+.IP 1. 4
+A \fC<ul class="dir">\fR tag will be inserted into the document instead of the
+directive.
+.
+.IP 2. 4
+For every subdirectory of the directory containing the input file, up to
+.I num
+(if present) or 5 (if omitted) total subdirectories, a \fC<li>\fR
+tag will be inserted into the \fC<ul class="dir">\fR tag.
+.
+.IP 3. 4
+A \fC<details>\fR tag will be inserted into each \fC<li>\fR tag.
+.
+.IP 4. 4
+Inside the \fC<details>\fR tag, a \fC<summary>\fR tag will be inserted with the
+name of the subdirectory. If
+.I macroname
+is present, the name of the subdirectory will be prepended with the body of a
+macro
+.IR macroname .
+.
+.IP 5. 4
+After the \fC<summary>\fR tag a \fC<div>\fR tag will be inserted into
+\fC<details>\fR, containing the concatenated contents of each
+.I .slw
+file inside that subdirectory in reverse lexicographical order (\fCsort -r\fR).
+For each file included in this manner, a \fC<h1>\fR tag will be prepended,
+containing the contents of that file's \fCtitle:\fR
+.SM YAML
+variable.
+.
+.RE
+.
 .IP \[bu]
 .BR "Previous Git commit information" .
 Directive \fC{git\-log}\fR is converted into a div with the id \fCgit\-log\fR
