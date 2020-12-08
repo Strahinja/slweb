@@ -5,7 +5,7 @@ Given the file `index.slw` in the current directory:
 ```
 site-name: Test website
 site-desc: My first website in slweb
----
+\---
 \
 \{main}
 \# Hello world

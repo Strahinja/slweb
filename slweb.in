@@ -90,10 +90,17 @@ function body()
             -e's/^### \([^\n]*\)$/<h3>\1<\/h3>/g' \
             -e's/^## \([^\n]*\)$/<h2>\1<\/h2>/g' \
             -e's/^# \([^\n]*\)$/<h1>\1<\/h1>/g' | \
+        sed -z -e 's/^\n*>/<blockquote>\n>/g' \
+            -e 's/^\([^>\n][^\n]*\)\?\n>/\1\n<blockquote>\n/g' \
+            -e 's/\n\([^>\n][^\n]*\)\?\n>/\1\n<blockquote>\n>/g' \
+            -e 's/\n>\([^\n]*\)\n\([^>]\)/\n>\1\n<\/blockquote>\n\2/g' \
+            -e 's/\n>\([^\n]*\)\n$/\n>\1\n<\/blockquote>\n/g' \
+            -e 's/\n>/\n/g' | \
         sed -e '1h;2,$H;$!d;g;s/\n\+\n```[^\n]*\n/\n\n<pre>\n/g' | \
 	sed -e 's/^```$/<\/pre>\n\n/g' | \
-        sed -e '1h;2,$H;$!d;g;s/\n\n\([^<{\n]\+\)/\n\n<p>\1/g' | \
-        sed -e '1h;2,$H;$!d;g;s/\([^>}\n]\)\n\n/\1<\/p>\n\n/g' | \
+        sed -e '1h;2,$H;$!d;g;s/^\([^<>{\n]\+\)/<p>\1/g' | \
+        sed -e '1h;2,$H;$!d;g;s/\n\n\([^<>{\n]\+\)/\n\n<p>\1/g' | \
+        sed -e '1h;2,$H;$!d;g;/\n\([^>\n][^\n]*\)\?\([^>}\n]\)\n\n/s/\([^\n]*[^>}\n]\)\n\n/\1<\/p>\n\n/g' | \
         sed -e '1h;2,$H;$!d;g;s/\([^>}\n]\)$/\1<\/p>\n\n/g' | \
         sed -e 's/^\*\*\([^*]*\)\*\*/<strong>\1<\/strong>/g' \
             -e 's/\([^\\]\)\*\*\([^*]*\)\*\*/\1<strong>\2<\/strong>/g' \
@@ -250,7 +257,7 @@ INDIR=$(dirname $INFILE 2>/dev/null)
 
 #if [ $BODY_ONLY -eq 0 ]; then
     grep -- '^---' $INFILE 2>&1 >/dev/null \
-        && DOC="$(echo; sed '0,/^---/d' $INFILE)" \
+        && DOC="$(sed '0,/^---/d' $INFILE)" \
         || DOC=$(cat $INFILE)
 #else
     #DOC=$(cat $INFILE)
@@ -330,7 +337,7 @@ if [ $BODY_ONLY -eq 0 ]; then
     end_head
     begin_body
 fi
-[ -n "${VARS[title]}" ] && echo "<h2>${VARS[title]}</h2>"
+[ -n "${VARS[title]}" ] && DOC="## ${VARS[title]}$(echo; echo "$DOC")"
 body "$DOC"
 if [ $BODY_ONLY -eq 0 ]; then
     end_body

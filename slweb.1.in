@@ -87,7 +87,11 @@ Text inside \fC*asterisks*\fR or \fC_underlines_\fR will be put inside
 .BR Backticks .
 Text inside \fC`backticks`\fR will be put inside \fC<code></code>\fR (one per
 line, both backticks need to be on the same line).
-
+.
+.IP \[bu]
+.BR "Blockquotes" .
+Starting the line with \fC>\fR will surround it with a \fC<blockquote>\fR tag.
+Multiple lines are supported.
 .
 .IP \[bu]
 .BR "Links (limited)" .
@@ -247,6 +251,11 @@ The contents of this variable will be treated as a
 .sm CSS
 file name to be included using the \fC<link rel="stylesheet" />\fR tag.
 .
+.IP \[bu] 4
+.BR title .
+If present, contents of this variable will be prepended to the body as a second
+level heading (\fCtitle: Some title\fR  becomes  \fC## Some title\fR).
+.
 .SH "SEE ALSO"
 .BR sed (1)
 .
@@ -301,6 +310,87 @@ file \fCindex.html\fR contains:
 </main>
 </body>
 </html>
+.in -4
+.sp
+.EE
+.
+.SH "KNOWN LIMITATIONS"
+.
+.IP \[bu] 4
+Currently there is no way to determine where the paragraph inside a tag should
+begin and end without adding blank lines or using the \fC{p}{/p}\fR notation.
+For example, the code
+.EX
+.in +4
+.sp
+{tag}
+First paragraph
+
+Second paragraph
+{/tag}
+.in -4
+.sp
+.EE
+will produce
+.EX
+.in +4
+.sp
+<tag>
+First paragraph</p>
+
+<p>Second paragraph
+</tag>
+.in -4
+.sp
+.EE
+You can suppress the paragraph starting/ending tags by prepending blank lines
+with a backslash, like this:
+.EX
+.in +4
+.sp
+{tag}
+First paragraph
+\[rs]
+Second paragraph
+{/tag}
+.in -4
+.sp
+.EE
+which will produce
+.EX
+.in +4
+.sp
+<tag>
+First paragraph
+
+Second paragraph
+</tag>
+.in -4
+.sp
+.EE
+Adding blank lines helps, if paragraphs are desired:
+.EX
+.in +4
+.sp
+{tag}
+
+First paragraph
+
+Second paragraph
+
+{/tag}
+.in -4
+.sp
+.EE
+will produce
+.EX
+.in +4
+.sp
+<tag>
+<p>First paragraph</p>
+
+<p>Second paragraph</p>
+</tag>
 .in -4
 .sp
 .EE
