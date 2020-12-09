@@ -91,8 +91,8 @@ function body()
             -e's/^## \([^\n]*\)$/<h2>\1<\/h2>/g' \
             -e's/^# \([^\n]*\)$/<h1>\1<\/h1>/g' | \
         sed -z -e 's/^\n*>/<blockquote>\n>/g' \
-            -e 's/^\([^>\n][^\n]*\)\?\n>/\1\n<blockquote>\n/g' \
-            -e 's/\n\([^>\n][^\n]*\)\?\n>/\1\n<blockquote>\n>/g' \
+            -e 's/^\([^>\n][^\n]*\)\?\n>/\1\n><blockquote>\n>/g' \
+            -e 's/\n\([^>\n][^\n]*\)\?\n>/\n\1\n<blockquote>\n>/g' \
             -e 's/\n>\([^\n]*\)\n\([^>]\)/\n>\1\n<\/blockquote>\n\2/g' \
             -e 's/\n>\([^\n]*\)\n$/\n>\1\n<\/blockquote>\n/g' \
             -e 's/\n>/\n/g' | \
