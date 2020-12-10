@@ -6,6 +6,7 @@ INFILE=index.slw
 OUTFILE=index.html
 VERSION=%VERSION%
 LSDIRS_MAX_SUBDIRS=5
+LSDIRS_PERMALINK_PATTERN='\3.\2.\1.'
 
 function throw()
 {
@@ -267,7 +268,7 @@ INDIR=$(dirname $INFILE 2>/dev/null)
 lsdirs_commands=$(echo "$DOC" | \
     grep -e '{lsdirs\( [0-9]\+\)\?}' \
         -e '{lsdirs\( [0-9]\+\)\? =[^}]\+}')
-shopt -s extglob
+#shopt -s extglob
 #shopt -s nullglob
 lsdirs_subdir_count=$(echo "$lsdirs_commands" | \
     sed -e 's/{lsdirs\( \([0-9]\+\)\)\?}/\2/g' \
@@ -299,7 +300,13 @@ while IFS= read -r lsdirs_command; do
             find $lsdirs_subdir -mindepth 1 -name '*.slw' -print)
         while IFS= read -r lsdirscontent_file; do
             [ -z "$lsdirscontent_file" ] && continue
+            lsdirscontent_file_html=$(echo "$lsdirscontent_file" | \
+                sed -e 's/\.slw/\.html/g')
+	    lsdirscontent_file_date=$(grep '^date:' $lsdirscontent_file | \
+		sed -E "s/^date: ([0-9]{4})-([0-9]{2})-([0-9]{2})T.*/$LSDIRS_PERMALINK_PATTERN/g" | \
+                sed 1q)
             lsdirs_html="$lsdirs_html\
+		<a href=\"$INDIR/$lsdirscontent_file_html\">$lsdirscontent_file_date</a>\
                 $($0 -b -d $INDIR $INDIR/$lsdirscontent_file)"
         done <<< "$lsdirscontent_files"
 
@@ -310,8 +317,10 @@ while IFS= read -r lsdirs_command; do
     done <<< "$lsdirs_subdirs"
     lsdirs_html="$lsdirs_html\n</ul><!--dir-->\n"
     lsdirs_html=$(echo "$lsdirs_html" | \
-        sed -z -e's/\//\\\//g' -e's/\[/\\\[/g' -e's/\]/\\\]/g' -e's/\./\\\./g' \
-            -e's/\"/\\\"/g' -e's/\n/\\n/g')
+        sed -e's/\//\\\//g' -e's/\[/\\\[/g' -e's/\]/\\\]/g' -e's/\./\\\./g' \
+            -e's/\"/\\\"/g' | \
+        sed -ze 's/\n/\\n/g') 
+    # -e's/\n/\\n/g')
     DOC=$(echo "$DOC" | \
         sed -e "s/$lsdirs_command/$lsdirs_html/g")
 done <<< "$lsdirs_commands"
