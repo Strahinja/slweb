@@ -20,6 +20,7 @@
 #ifndef __DEFS_H
 #define __DEFS_H
 
+#include <errno.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>

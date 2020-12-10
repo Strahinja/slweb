@@ -18,6 +18,7 @@
  */
 
 #include "defs.h"
+#include <stdlib.h>
 
 int
 version()
@@ -40,7 +41,7 @@ error(int code, uint8_t* fmt, ...)
     uint8_t    buf[BUFSIZE];
     va_list args;
     va_start(args, fmt);
-    u8_vsnprintf(buf, sizeof(buf), fmt, args);
+    u8_vsnprintf(buf, sizeof(buf), (const char*)fmt, args);
     va_end(args);
     fprintf(stderr, "%s: %s", PROGRAMNAME, buf);
     return code;
@@ -72,6 +73,11 @@ set_basedir(char* arg, char** basedir)
 {
     if (*basedir)
         free(*basedir);
+
+    if (strlen(arg) < 1)
+    {
+        return error(1, (uint8_t*)"--basedir: Argument required\n");
+    }
 
     *basedir = (char*) calloc(strlen(arg)+1, sizeof(char));
 
@@ -171,6 +177,9 @@ main(int argc, char** argv)
         }
     }
 
+    if (cmd == CMD_BASEDIR)
+        return error(1, (uint8_t*)"-d: Argument required\n");
+
     if (cmd == CMD_VERSION)
         return version();
 
@@ -178,6 +187,37 @@ main(int argc, char** argv)
      *printf("debug: basedir=%s, filename=%s, body_only=%s\n",
      *        basedir, filename ? filename : "(NULL)", body_only ? "TRUE" : "FALSE");
      */
+
+    FILE* input = NULL;
+    if (filename)
+    {
+        input = fopen(filename, "r");
+        if (!input)
+        {
+            return error(ENOENT, (uint8_t*)"File not found: %s\n", filename);
+        }
+    }
+    else
+        input = stdin;
+
+    uint8_t* line = (uint8_t*) calloc(BUFSIZE, sizeof(uint8_t));
+    size_t line_len = 0;
+
+    do
+    {
+        fgets((char*)line, sizeof(uint8_t) * BUFSIZE, input);
+        line_len = u8_strlen(line);
+
+        if (!feof(input))
+        {
+            uint8_t* eol = u8_strchr(line, (ucs4_t)'\n');
+            if (eol)
+                *eol = (uint8_t)'\0';
+
+            printf("%s\n", line);
+        }
+    }
+    while (!feof(input));
 
     return 0;
 }

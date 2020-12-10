@@ -1,3 +1,4 @@
+.cache
 *~
 *.bak
 *.orig
@@ -10,6 +11,7 @@ nohup.out
 *.gz
 slweb
 slweb.1
+compile_commands.json
 examples/basic/index.html
 examples/includes/index.html
 examples/tags/index.html
