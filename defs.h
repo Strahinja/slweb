@@ -63,9 +63,11 @@ const USHORT ST_YAML_VAL   = 1 << 2;
 const USHORT ST_PARA_OPEN  = 1 << 3;
 const USHORT ST_TAG        = 1 << 4;
 const USHORT ST_HEADING    = 1 << 5;
-const USHORT ST_PRE        = 1 << 6;
-const USHORT ST_CODE       = 1 << 7;
-const USHORT ST_BLOCKQUOTE = 1 << 8;
+const USHORT ST_BOLD       = 1 << 6;
+const USHORT ST_ITALIC     = 1 << 7;
+const USHORT ST_PRE        = 1 << 8;
+const USHORT ST_CODE       = 1 << 9;
+const USHORT ST_BLOCKQUOTE = 1 << 10;
 #pragma GCC diagnostic pop
 
 #endif /* __DEFS_H */
