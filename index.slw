@@ -27,13 +27,13 @@ Given the file `index.slw` in the current directory:
 site-name: Test website
 site-desc: My first website in slweb
 ---
-\
-\{main}
-\# Hello world
-\
+
+{main}
+# Hello world
+
 This is an \_example_ of a statically generated HTML.
-\
-\{/main}
+
+{/main}
 ```
 
 after using the command:
@@ -55,12 +55,12 @@ file `index.html` contains:
     &lt;meta name="generator" content="slweb" /&gt;
 &lt;/head&gt;
 &lt;body&gt;
-\
+
 &lt;main&gt;
 &lt;h1&gt;Hello world&lt;/h1&gt;
-\
+
 &lt;p&gt;This is an &lt;em&gt;example&lt;/em&gt; of a statically generated HTML.&lt;/p&gt;
-\
+
 &lt;/main&gt;
 &lt;/body&gt;
 &lt;/html&gt;
