@@ -40,6 +40,9 @@ typedef enum
     TRUE = 1
 } BOOL;
 
+typedef unsigned char UBYTE;
+typedef unsigned short USHORT;
+
 typedef enum
 {
     CMD_NONE,
@@ -48,6 +51,22 @@ typedef enum
     CMD_HELP,
     CMD_VERSION
 } Command;
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-const-variable"
+const UBYTE MAX_HEADING_LEVEL = 4;
+
+const USHORT ST_NONE       = 0;
+const USHORT ST_YAML       = 1;
+const USHORT ST_YAML_VAR   = 1 << 1;
+const USHORT ST_YAML_VAL   = 1 << 2;
+const USHORT ST_PARA_OPEN  = 1 << 3;
+const USHORT ST_TAG        = 1 << 4;
+const USHORT ST_HEADING    = 1 << 5;
+const USHORT ST_PRE        = 1 << 6;
+const USHORT ST_CODE       = 1 << 7;
+const USHORT ST_BLOCKQUOTE = 1 << 8;
+#pragma GCC diagnostic pop
 
 #endif /* __DEFS_H */
 

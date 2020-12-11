@@ -1,35 +1,9 @@
-			       **IMPORTANT NOTE**
-			       ==================
-
-Version v0.2.8-beta is the last version of slweb using sed. I decided to switch
-to C because of the limitation of sed(1) when used to parse the entire file as a
-single string (the -z option), as listed in
-
-    https://www.gnu.org/software/sed/manual/sed.html#Limitations
-
-    > For those who want to write portable sed scripts, be aware that some
-    > implementations have been known to limit line lengths (for the pattern
-    > and hold spaces) to be no more than 4000 bytes. The POSIX standard
-    > specifies that conforming sed implementations shall support at least
-    > 8192 byte line lengths.  GNU sed has no built-in limit on line length;
-    > as long as it can malloc() more (virtual) memory, you can feed or
-    > construct lines as long as you like.
-
-When processed through slweb, some of the test pages using the cyrillic text in
-UTF-8 would be rendered incorrectly, even when using GNU sed. I suspect this is
-the result of the mentioned limitation.
-
-    The next version of slweb is going to be written in C from scratch and
-labeled v0.3.0.
-
-								    -- Strahinya
-
 
                                      slweb
                                      =====
 
-Slweb is a static website generator which aims at being simplistic. It uses
-sed(1) to transform a custom Markdown-like syntax into HTML.
+Slweb is a static website generator which aims at being simplistic. It
+transforms custom Markdown-like syntax into HTML.
 
 
                                     Install

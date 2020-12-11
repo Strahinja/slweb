@@ -1,3 +1,4 @@
+---
 site-name: slweb - Simple static website generator. 
 site-desc: Simple static website generator
 stylesheet: index.css
@@ -18,7 +19,7 @@ $ make && sudo make install
 
 ## Examples
 
-See the `[examples/](https://github.com/Strahinja/slweb/tree/master/examples)` directory in this repository.
+See the [`examples/`](https://github.com/Strahinja/slweb/tree/master/examples) directory in this repository.
 
 Given the file `index.slw` in the current directory:
 
