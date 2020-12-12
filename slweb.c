@@ -18,10 +18,7 @@
  */
 
 #include "defs.h"
-#include <asm-generic/errno-base.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistr.h>
+#include <stdint.h>
 
 static size_t lineno = 0;
 static size_t colno = 1;
@@ -45,7 +42,7 @@ usage()
 int
 error(int code, uint8_t* fmt, ...)
 {
-    uint8_t    buf[BUFSIZE];
+    uint8_t buf[BUFSIZE];
     va_list args;
     va_start(args, fmt);
     u8_vsnprintf(buf, sizeof(buf), (const char*)fmt, args);
@@ -57,7 +54,7 @@ error(int code, uint8_t* fmt, ...)
 int
 warning(int code, uint8_t* fmt, ...)
 {
-    uint8_t    buf[BUFSIZE];
+    uint8_t buf[BUFSIZE];
     va_list args;
     va_start(args, fmt);
     u8_vsnprintf(buf, sizeof(buf), (const char*)fmt, args);
@@ -81,9 +78,7 @@ substr(char* src, int start, int finish)
     char* presult = result;
 
     for (int i = start; i < finish && *(src+i) != '\0'; i++)
-    {
         *presult++ = *(src+i);
-    }
     *presult = '\0';
 
     return result;
@@ -96,9 +91,7 @@ set_basedir(char* arg, char** basedir)
         free(*basedir);
 
     if (strlen(arg) < 1)
-    {
         return error(1, (uint8_t*)"--basedir: Argument required\n");
-    }
 
     *basedir = (char*) calloc(strlen(arg)+1, sizeof(char));
 
@@ -129,6 +122,8 @@ finish_and_print_token(uint8_t** token, uint8_t** ptoken, FILE* output)
 
     *ptoken[0] = '\0';
     fprintf(output, "%s", *token);
+
+    return 0;
 }
 
 int
@@ -161,7 +156,7 @@ process_tag(uint8_t* token, FILE* output, BOOL end_tag)
     if (!strcmp((char*)token, "git-log"))
     {
         fprintf(output, "<div id=\"git-log\">\n"
-                "Previous commit:");
+                "Previous commit:\n");
         char* command = (char*) calloc(BUFSIZE, sizeof(char));
         sprintf(command, 
                 "git log -1 --pretty=format:\"%s %%h %%ci (%%cn) %%d\""
@@ -213,118 +208,73 @@ process_tag(uint8_t* token, FILE* output, BOOL end_tag)
 }
 
 int
-main(int argc, char** argv)
+begin_html_and_head(FILE* output, KeyValue* vars, size_t vars_count)
 {
-    char* arg;
-    Command cmd = CMD_NONE;
-    BOOL body_only = FALSE;
-    char* basedir = NULL;
-
-    basedir = (char*) calloc(2, sizeof(char));
-    if (!basedir)
-        return error(ENOMEM, (uint8_t*)"Memory allocation failed (out of memory?)\n");
-    basedir[0] = '.';
-
-    while ((arg = *++argv))
+    KeyValue* pvars = vars;
+    while (pvars < vars + vars_count)
     {
-        if (*arg == '-')
+        if (!u8_strcmp(pvars->key, (uint8_t*)"site-name"))
         {
-            arg++;
-            char c = *arg++;
-            int result;
-
-            if (c == '-')
-            {
-                if (!strcmp(arg, "version"))
-                {
-                    cmd = CMD_VERSION;
-                }
-                else if (!strcmp(arg, "body-only"))
-                {
-                    arg += strlen("body-only");
-                    body_only = TRUE;
-                }
-                else if (!strcmp(substr(arg, 0, strlen("basedir")), "basedir"))
-                {
-                    arg += strlen("basedir");
-                    result = set_basedir(arg, &basedir);
-                    if (result)
-                        return result;
-                }
-                else if (!strcmp(arg, "help"))
-                {
-                    return usage();
-                }
-                else
-                {
-                    error(EINVAL, (uint8_t*)"Invalid argument: --%s\n", arg);
-                    return usage();
-                }
-            }
-            else
-            {
-                switch (c)
-                {
-                case 'b':
-                    body_only = TRUE;
-                    break;
-                case 'd':
-                    cmd = CMD_BASEDIR;
-                    break;
-                case 'h':
-                    return usage();
-                    break;
-                case 'v':
-                    cmd = CMD_VERSION;
-                    break;
-                default:
-                    error(EINVAL, (uint8_t*)"Invalid argument: -%c\n", c);
-                    return usage();
-                }
-            }
+            break;
         }
-        else
-        {
-            int result;
-
-            if (cmd == CMD_BASEDIR)
-            {
-                result = set_basedir(arg, &basedir);
-                if (result)
-                    return result;
-            }
-            else
-            {
-                filename = arg;
-            }
-            cmd = CMD_NONE;
-        }
+        pvars++;
     }
+    fprintf(output, "<!DOCTYPE html>\n"
+            "<html lang=\"en\">\n"
+            "<head>\n"
+            "<title>%s</title>\n"
+            "<meta charset=\"utf8\" />\n"
+            "<meta name=\"description\" content=\"${VARS[site-desc]}\" />\n"
+            "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n"
+            "<meta name=\"generator\" content=\"slweb\" />\n",
+            pvars->value);
+    return 0;
+}
 
-    if (cmd == CMD_BASEDIR)
-        return error(1, (uint8_t*)"-d: Argument required\n");
-
-    if (cmd == CMD_VERSION)
-        return version();
-
-    FILE* input = NULL;
-    if (filename)
+int
+add_css(FILE* output, KeyValue* vars, size_t vars_count)
+{
+    KeyValue* pvars = vars;
+    while (pvars < vars + vars_count)
     {
-        input = fopen(filename, "r");
-        if (!input)
-        {
-            return error(ENOENT, (uint8_t*)"No such file: %s\n", filename);
-        }
+        if (!u8_strcmp(pvars->key, (uint8_t*)"stylesheet"))
+            fprintf(output, "<link rel=\"stylesheet\" href=\"%s\" />\n",
+                    pvars->value);
+        pvars++;
     }
-    else
-        input = stdin;
+    return 0;
+}
 
-    uint8_t* line = (uint8_t*) calloc(BUFSIZE, sizeof(uint8_t));
+int
+end_head_start_body(FILE* output)
+{
+    fprintf(output, "</head>\n"
+            "<body>\n");
+    return 0;
+}
+
+int
+end_body_and_html(FILE* output)
+{
+    fprintf(output, "</html>\n");
+    return 0;
+}
+
+int
+slweb_parse(uint8_t* buffer, FILE* output, 
+        KeyValue** vars, size_t* vars_count, 
+        KeyValue** macros, size_t* macros_count,
+        uint8_t*** links, size_t* links_count,
+        BOOL body_only, BOOL read_yaml_macros_and_links)
+{
+    uint8_t* pbuffer = NULL;
+    uint8_t* line = NULL;
     uint8_t* pline = NULL;
     size_t line_len = 0;
-    uint8_t* token = (uint8_t*) calloc(BUFSIZE, sizeof(uint8_t));
+    uint8_t* token = NULL;
     uint8_t* ptoken = NULL;
     size_t token_len = 0;
+    KeyValue* pvars = NULL;
     USHORT state = ST_NONE;
     UBYTE heading_level = 0;
     BOOL end_tag = FALSE;
@@ -332,17 +282,46 @@ main(int argc, char** argv)
     BOOL previous_line_blank = FALSE;
     BOOL print_newline = FALSE;
 
+    if (!buffer)
+        return error(1, (uint8_t*)"Empty buffer\n");
+
+    if (!vars || !*vars)
+        return error(EINVAL, (uint8_t*)"Invalid argument (vars)\n");
+
+    line = (uint8_t*) calloc(BUFSIZE, sizeof(uint8_t));
     if (!line)
-        return error(ENOMEM, (uint8_t*)"Memory allocation failed (out of memory?)\n");
+        return error(ENOMEM, 
+                (uint8_t*)"Memory allocation failed (out of memory?)\n");
+
+    token = (uint8_t*) calloc(BUFSIZE, sizeof(uint8_t));
+    if (!token)
+        return error(ENOMEM, 
+                (uint8_t*)"Memory allocation failed (out of memory?)\n");
+
+    pbuffer = buffer;
+    pvars = *vars;
+
+    if (!read_yaml_macros_and_links)
+    {
+        begin_html_and_head(output, *vars, *vars_count);
+        add_css(output, *vars, *vars_count);
+        end_head_start_body((output));
+    }
 
     do
     {
-        if (!fgets((char*)line, sizeof(char) * BUFSIZE, input))
+        uint8_t* eol = u8_strchr(pbuffer, (ucs4_t)'\n');
+        if (!eol)
             continue;
 
-        uint8_t* eol = u8_strchr(line, (ucs4_t)'\n');
-        if (eol)
-            *eol = (uint8_t)'\0';
+        pline = line;
+        while (pbuffer != eol)
+            *pline++ = *pbuffer++;
+        pbuffer++;
+        *pline = '\0';
+        pline = line;
+        line_len = u8_strlen(line);
+        ptoken = init_string(&token);
 
         lineno++;
         colno = 1;
@@ -356,11 +335,7 @@ main(int argc, char** argv)
          *        previous_line_blank ? "T" : "F");
          */
 
-        line_len = u8_strlen(line);
-        pline = line;
-        ptoken = init_string(&token);
-
-        do
+        while (pline && *pline)
         {
             switch (*pline)
             {
@@ -386,6 +361,36 @@ main(int argc, char** argv)
                     colno++;
                 }
                 break;
+            case ':':
+                if (state & ST_YAML
+                        && !(state & ST_YAML_VAL)
+                        && read_yaml_macros_and_links)
+                {
+                    *ptoken = '\0';
+
+                    (*vars_count)++;
+
+                    if (*vars_count > 1)
+                    {
+                        *vars = (KeyValue*) realloc(*vars, 
+                                *vars_count * sizeof(KeyValue));
+                        pvars = *vars + *vars_count - 1;
+                    }
+                    pvars->key = (uint8_t*) calloc(u8_strlen(token)+1,
+                            sizeof(uint8_t));
+                    u8_strcpy(pvars->key, token);
+                    pvars->value = NULL;
+
+                    state |= ST_YAML_VAL;
+                    ptoken = init_string(&token);
+                    pline++;
+                    colno++;
+                }
+                else {
+                    *ptoken++ = *pline++;
+                    colno++;
+                }
+                break;
             case '`':
                 if (colno == 1 
                         && u8_strlen(pline) > 2
@@ -393,10 +398,13 @@ main(int argc, char** argv)
                 {
                     state ^= ST_PRE;
                     
-                    if (state & ST_PRE)
-                        printf("<pre>");
-                    else
-                        printf("</pre>");
+                    if (!read_yaml_macros_and_links)
+                    {
+                        if (state & ST_PRE)
+                            fprintf(output, "<pre>");
+                        else
+                            fprintf(output, "</pre>");
+                    }
                     print_newline = TRUE;
 
                     pline += 3;
@@ -444,7 +452,8 @@ main(int argc, char** argv)
                     pline++;
                     colno++;
                 }
-                else {
+                else 
+                {
                     *ptoken++ = *pline++;
                     colno++;
                 }
@@ -579,8 +588,8 @@ main(int argc, char** argv)
                 }
 
                 state |= ST_TAG;
-                if (token[0])
-                    finish_and_print_token(&token, &ptoken, stdout);
+                if (!read_yaml_macros_and_links && token[0])
+                    finish_and_print_token(&token, &ptoken, output);
                 ptoken = init_string(&token);
                 pline++;
                 colno++;
@@ -618,7 +627,8 @@ main(int argc, char** argv)
 
                 state &= ~ST_TAG;
                 *ptoken = '\0';
-                process_tag(token, stdout, end_tag);
+                if (!read_yaml_macros_and_links)
+                    process_tag(token, output, end_tag);
                 first_line_in_doc = FALSE;
                 print_newline = TRUE;
                 ptoken = init_string(&token);
@@ -629,24 +639,39 @@ main(int argc, char** argv)
                 break;
 
             default:
+                /*
+                 *fprintf(stderr, "line=[%s]\n",
+                 *        (char*)line);
+                 *fprintf(stderr, "ptoken=*pline=0x%X [%c]\n",
+                 *        (char)*pline,
+                 *        (char)*pline);
+                 */
                 *ptoken++ = *pline++;
                 colno++;
             }
         }
-        while (pline && *pline);
 
         if (!(state & ST_YAML))
         {
             if (token[0])
             {
-                if (colno != 2 && !(state & ST_PRE))
-                    printf("\n");
+                if (!read_yaml_macros_and_links
+                        && colno != 1 && !(state & ST_PRE))
+                    fprintf(output, "\n");
 
+                /*
+                 *fprintf(stderr, "rymal=%s\n",
+                 *        read_yaml_macros_and_links ? "TRUE" : "FALSE");
+                 *fprintf(stderr, "state = 0x%X\n", state);
+                 *fprintf(stderr, "token=[%s]\n",
+                 *        token);
+                 */
                 if (state & ST_HEADING)
                 {
                     state &= ~ST_HEADING;
                     *ptoken = '\0';
-                    process_heading(token, stdout, heading_level);
+                    if (!read_yaml_macros_and_links)
+                        process_heading(token, output, heading_level);
                     first_line_in_doc = FALSE;
                     ptoken = init_string(&token);
                     heading_level = 0;
@@ -657,22 +682,25 @@ main(int argc, char** argv)
                     if (first_line_in_doc || previous_line_blank
                             && !(state & ST_PRE))
                     {
-                        printf("<p>");
+                        if (!read_yaml_macros_and_links)
+                            fprintf(output, "<p>");
                         first_line_in_doc = FALSE;
                         state |= ST_PARA_OPEN;
                     }
-                    finish_and_print_token(&token, &ptoken, stdout);
+                    if (!read_yaml_macros_and_links)
+                        finish_and_print_token(&token, &ptoken, output);
                     print_newline = state & (ST_PRE | ST_CODE);
                 }
                 previous_line_blank = FALSE;
             }
-            else if (colno == 2)
+            else if (colno == 1)
             {
                 if (!previous_line_blank 
                         && (state & ST_PARA_OPEN)
                         && !(state & ST_PRE))
                 {
-                    printf("</p>\n");
+                    if (!read_yaml_macros_and_links)
+                        fprintf(output, "</p>\n");
                     print_newline = FALSE;
                     state &= ~ST_PARA_OPEN;
                 }
@@ -681,22 +709,194 @@ main(int argc, char** argv)
             else
                 previous_line_blank = FALSE;
 
-            if (print_newline
-                    || (state & ST_PRE))
+            if (!read_yaml_macros_and_links 
+                    && (print_newline || (state & ST_PRE)))
             {
-                printf("\n");
+                fprintf(output, "\n");
                 print_newline = FALSE;
             }
 
         }
+        else if (token[0] && read_yaml_macros_and_links
+                && state & ST_YAML_VAL)
+        {
+            *ptoken = '\0';
+            pvars->value = (uint8_t*) calloc(u8_strlen(token)+1, 
+                    sizeof(uint8_t));
+            u8_strcpy(pvars->value, token);
+            /*
+             *fprintf(stderr, "pvars[%d] = [%s -> %s]\n",
+             *        *vars_count-1,
+             *        pvars->key,
+             *        pvars->value);
+             */
+        }
 
         ptoken = init_string(&token);
 
+        if (line_len == 0)
+            previous_line_blank = TRUE;
+
+        /* Lasts until the end of line */
+        state &= ~ST_YAML_VAL;
     }
-    while (!feof(input));
+    while (pbuffer && *pbuffer);
+
+    if (!read_yaml_macros_and_links)
+    {
+        end_body_and_html(output);
+    }
 
     free(line);
+    free(token);
 
     return 0;
+}
+
+int
+main(int argc, char** argv)
+{
+    char* arg;
+    Command cmd = CMD_NONE;
+    BOOL body_only = FALSE;
+    char* basedir = NULL;
+
+    basedir = (char*) calloc(2, sizeof(char));
+    if (!basedir)
+        return error(ENOMEM, (uint8_t*)"Memory allocation failed (out of memory?)\n");
+    basedir[0] = '.';
+
+    while ((arg = *++argv))
+    {
+        if (*arg == '-')
+        {
+            arg++;
+            char c = *arg++;
+            int result;
+
+            if (c == '-')
+            {
+                if (!strcmp(arg, "version"))
+                    cmd = CMD_VERSION;
+                else if (!strcmp(arg, "body-only"))
+                {
+                    arg += strlen("body-only");
+                    body_only = TRUE;
+                }
+                else if (!strcmp(substr(arg, 0, strlen("basedir")), 
+                            "basedir"))
+                {
+                    arg += strlen("basedir");
+                    result = set_basedir(arg, &basedir);
+                    if (result)
+                        return result;
+                }
+                else if (!strcmp(arg, "help"))
+                    return usage();
+                else
+                {
+                    error(EINVAL, (uint8_t*)"Invalid argument: --%s\n", arg);
+                    return usage();
+                }
+            }
+            else
+            {
+                switch (c)
+                {
+                case 'b':
+                    body_only = TRUE;
+                    break;
+                case 'd':
+                    cmd = CMD_BASEDIR;
+                    break;
+                case 'h':
+                    return usage();
+                    break;
+                case 'v':
+                    cmd = CMD_VERSION;
+                    break;
+                default:
+                    error(EINVAL, (uint8_t*)"Invalid argument: -%c\n", c);
+                    return usage();
+                }
+            }
+        }
+        else
+        {
+            int result;
+
+            if (cmd == CMD_BASEDIR)
+            {
+                result = set_basedir(arg, &basedir);
+                if (result)
+                    return result;
+            }
+            else
+                filename = arg;
+            cmd = CMD_NONE;
+        }
+    }
+
+    if (cmd == CMD_BASEDIR)
+        return error(1, (uint8_t*)"-d: Argument required\n");
+
+    if (cmd == CMD_VERSION)
+        return version();
+
+    FILE* input = NULL;
+    FILE* output = stdout;
+    if (filename)
+    {
+        input = fopen(filename, "r");
+        if (!input)
+            return error(ENOENT, (uint8_t*)"No such file: %s\n", filename);
+    }
+    else
+        input = stdin;
+
+    struct stat fs;
+    fstat(fileno(input), &fs);
+    uint8_t* buffer = (uint8_t*) calloc(fs.st_size, sizeof(uint8_t));
+    if (!buffer)
+        return error(ENOMEM, 
+                (uint8_t*)"Memory allocation failed (out of memory?)\n");
+
+    fread((void*)buffer, sizeof(char), fs.st_size, input);
+
+    KeyValue* vars = NULL;
+    size_t vars_count = 0;
+    KeyValue* macros = NULL;
+    size_t macros_count = 0;
+    uint8_t** links = NULL;
+    size_t links_count = 0;
+
+    vars = (KeyValue*) calloc(1, sizeof(KeyValue));
+    if (!vars)
+        return error(ENOMEM, 
+                (uint8_t*)"Memory allocation failed (out of memory?)\n");
+    vars->key = NULL;
+    vars->value = NULL;
+
+    macros = (KeyValue*) calloc(1, sizeof(KeyValue));
+    if (!macros)
+        return error(ENOMEM, 
+                (uint8_t*)"Memory allocation failed (out of memory?)\n");
+    macros->key = NULL;
+    macros->value = NULL;
+
+    links = (uint8_t**) calloc(1, sizeof(uint8_t*));
+    if (!links)
+        return error(ENOMEM, 
+                (uint8_t*)"Memory allocation failed (out of memory?)\n");
+
+    /* First pass: read YAML, macros and links */
+    slweb_parse(buffer, output, &vars, &vars_count, &macros, &macros_count,
+            &links, &links_count,
+            body_only, TRUE);
+
+    /* Second pass: parse and output */
+    return slweb_parse(buffer, output, &vars, &vars_count, 
+            &macros, &macros_count, &links, &links_count,
+            body_only, FALSE);
 }
 

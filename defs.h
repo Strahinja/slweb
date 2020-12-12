@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <sys/stat.h>
 #include <unistr.h>
 #include <unistdio.h>
 #include <uniwidth.h>
@@ -52,22 +53,27 @@ typedef enum
     CMD_VERSION
 } Command;
 
+typedef struct
+{
+    uint8_t* key;
+    uint8_t* value;
+} KeyValue;
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-const-variable"
 const UBYTE MAX_HEADING_LEVEL = 4;
 
 const USHORT ST_NONE       = 0;
 const USHORT ST_YAML       = 1;
-const USHORT ST_YAML_VAR   = 1 << 1;
-const USHORT ST_YAML_VAL   = 1 << 2;
-const USHORT ST_PARA_OPEN  = 1 << 3;
-const USHORT ST_TAG        = 1 << 4;
-const USHORT ST_HEADING    = 1 << 5;
-const USHORT ST_BOLD       = 1 << 6;
-const USHORT ST_ITALIC     = 1 << 7;
-const USHORT ST_PRE        = 1 << 8;
-const USHORT ST_CODE       = 1 << 9;
-const USHORT ST_BLOCKQUOTE = 1 << 10;
+const USHORT ST_YAML_VAL   = 1 << 1;
+const USHORT ST_PARA_OPEN  = 1 << 2;
+const USHORT ST_TAG        = 1 << 3;
+const USHORT ST_HEADING    = 1 << 4;
+const USHORT ST_BOLD       = 1 << 5;
+const USHORT ST_ITALIC     = 1 << 6;
+const USHORT ST_PRE        = 1 << 7;
+const USHORT ST_CODE       = 1 << 8;
+const USHORT ST_BLOCKQUOTE = 1 << 9;
 #pragma GCC diagnostic pop
 
 #endif /* __DEFS_H */
