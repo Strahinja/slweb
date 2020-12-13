@@ -1,0 +1,9 @@
+---
+site-name: Links test
+---
+Links [Test][1].
+
+Another [link, inline](https://suckless.org).
+
+[1]: https://strahinja.org
+

@@ -84,6 +84,19 @@ substr(char* src, int start, int finish)
     return result;
 }
 
+uint8_t*
+get_value(KeyValue* list, size_t list_count, uint8_t* key)
+{
+    KeyValue* plist = list;
+    while (plist < list + list_count)
+    {
+        if (!u8_strcmp(plist->key, key))
+            return plist->value;
+        plist++;
+    }
+    return NULL;
+}
+
 int
 set_basedir(char* arg, char** basedir)
 {
@@ -132,9 +145,7 @@ process_heading(uint8_t* token, FILE* output, UBYTE heading_level)
     if (!token || u8_strlen(token) < 1)
         warning(1, (uint8_t*)"Empty heading\n");
 
-    fprintf(output, "<h%d>%s</h%d>",
-            heading_level,
-            token ? (char*)token : "",
+    fprintf(output, "<h%d>%s</h%d>", heading_level, token ? (char*)token : "",
             heading_level);
 
     return 0;
@@ -149,20 +160,18 @@ process_tag(uint8_t* token, FILE* output, BOOL end_tag)
     char* basename = (char*) calloc(strlen(filename), sizeof(char));
     char* slash = strrchr(filename, '/');
     if (slash)
-        strcpy(basename, slash);
+        strcpy(basename, slash+1);
     else
         strcpy(basename, filename);
 
     if (!strcmp((char*)token, "git-log"))
     {
-        fprintf(output, "<div id=\"git-log\">\n"
-                "Previous commit:\n");
+        fprintf(output, "<div id=\"git-log\">\nPrevious commit:\n");
         char* command = (char*) calloc(BUFSIZE, sizeof(char));
         sprintf(command, 
                 "git log -1 --pretty=format:\"%s %%h %%ci (%%cn) %%d\""
                 " || echo \"(Not in a Git repository)\"",
             basename);
-        /*fprintf(stderr, "$(%s)\n", command);*/
         FILE* cmd_output = popen(command, "r");
         if (!cmd_output)
         {
@@ -198,8 +207,7 @@ process_tag(uint8_t* token, FILE* output, BOOL end_tag)
                 "</div><!--made-by-->\n");
     }
     else
-        fprintf(output, "<%s%s>",
-                end_tag ? (const char*)"/" : (const char*)"",
+        fprintf(output, "<%s%s>", end_tag ? (const char*)"/" : (const char*)"",
                 token);
 
     free(basename);
@@ -208,26 +216,88 @@ process_tag(uint8_t* token, FILE* output, BOOL end_tag)
 }
 
 int
+process_link(uint8_t* link_text, uint8_t* link_id, KeyValue* links, 
+        size_t links_count, FILE* output)
+{
+    KeyValue* plinks = links;
+    uint8_t* url = get_value(links, links_count, link_id);
+    fprintf(output, "<a href=\"%s\">%s</a>", 
+            url ? (char*)url : "", link_text);
+    return 0;
+}
+
+int
+process_inline_link(uint8_t* link_text, uint8_t* link_url, FILE* output)
+{
+    fprintf(output, "<a href=\"%s\">%s</a>", 
+            link_url, link_text);
+    return 0;
+}
+
+int
+process_image(uint8_t* image_text, uint8_t* image_id, KeyValue* links, 
+        size_t links_count, FILE* output)
+{
+    uint8_t* url = get_value(links, links_count, image_id);
+    fprintf(output, "<img src=\"%s\" alt=\"%s\" />", 
+            url ? (char*)url : "", image_text);
+    return 0;
+}
+
+int
+process_inline_image(uint8_t* image_text, uint8_t* image_url, FILE* output)
+{
+    fprintf(output, "<img src=\"%s\" alt=\"%s\" />", 
+            image_url, image_text);
+    return 0;
+}
+
+int
+process_text_token(USHORT* state, 
+        BOOL* first_line_in_doc, 
+        BOOL previous_line_blank,
+        BOOL* print_newline,
+        BOOL processed_starting_newline,
+        BOOL read_yaml_macros_and_links,
+        FILE* output,
+        uint8_t** token,
+        uint8_t** ptoken)
+{
+    if ((*first_line_in_doc || previous_line_blank)
+            && !processed_starting_newline
+            && !(*state & ST_PRE))
+    {
+        if (!read_yaml_macros_and_links)
+            fprintf(output, "<p>");
+        *first_line_in_doc = FALSE;
+        *state |= ST_PARA_OPEN;
+    }
+    if (!read_yaml_macros_and_links)
+        finish_and_print_token(token, ptoken, output);
+    *print_newline = *state & (ST_PRE | ST_CODE);
+    return 0;
+}
+
+int
 begin_html_and_head(FILE* output, KeyValue* vars, size_t vars_count)
 {
     KeyValue* pvars = vars;
-    while (pvars < vars + vars_count)
-    {
-        if (!u8_strcmp(pvars->key, (uint8_t*)"site-name"))
-        {
-            break;
-        }
-        pvars++;
-    }
+    uint8_t* site_name = get_value(vars, vars_count, (uint8_t*)"site-name");
+    uint8_t* site_desc = get_value(vars, vars_count, (uint8_t*)"site-desc");
+
     fprintf(output, "<!DOCTYPE html>\n"
             "<html lang=\"en\">\n"
             "<head>\n"
             "<title>%s</title>\n"
-            "<meta charset=\"utf8\" />\n"
-            "<meta name=\"description\" content=\"${VARS[site-desc]}\" />\n"
-            "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n"
-            "<meta name=\"generator\" content=\"slweb\" />\n",
-            pvars->value);
+            "<meta charset=\"utf8\" />\n",
+            site_name ? (char*)site_name : "");
+    
+    if (site_desc && *site_desc)
+        fprintf(output, "<meta name=\"description\" content=\"%s\" />\n",
+                (char*)site_desc);
+
+    fprintf(output, "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n"
+            "<meta name=\"generator\" content=\"slweb\" />\n");
     return 0;
 }
 
@@ -248,15 +318,14 @@ add_css(FILE* output, KeyValue* vars, size_t vars_count)
 int
 end_head_start_body(FILE* output)
 {
-    fprintf(output, "</head>\n"
-            "<body>\n");
+    fprintf(output, "</head>\n<body>\n");
     return 0;
 }
 
 int
 end_body_and_html(FILE* output)
 {
-    fprintf(output, "</html>\n");
+    fprintf(output, "</body>\n</html>\n");
     return 0;
 }
 
@@ -264,7 +333,7 @@ int
 slweb_parse(uint8_t* buffer, FILE* output, 
         KeyValue** vars, size_t* vars_count, 
         KeyValue** macros, size_t* macros_count,
-        uint8_t*** links, size_t* links_count,
+        KeyValue** links, size_t* links_count,
         BOOL body_only, BOOL read_yaml_macros_and_links)
 {
     uint8_t* pbuffer = NULL;
@@ -274,13 +343,17 @@ slweb_parse(uint8_t* buffer, FILE* output,
     uint8_t* token = NULL;
     uint8_t* ptoken = NULL;
     size_t token_len = 0;
+    uint8_t* link_text = NULL;
+    uint8_t* link_url = NULL;
     KeyValue* pvars = NULL;
+    KeyValue* plinks = NULL;
     USHORT state = ST_NONE;
     UBYTE heading_level = 0;
     BOOL end_tag = FALSE;
     BOOL first_line_in_doc = TRUE;
     BOOL previous_line_blank = FALSE;
     BOOL print_newline = FALSE;
+    BOOL processed_starting_newline = FALSE;
 
     if (!buffer)
         return error(1, (uint8_t*)"Empty buffer\n");
@@ -300,12 +373,13 @@ slweb_parse(uint8_t* buffer, FILE* output,
 
     pbuffer = buffer;
     pvars = *vars;
+    plinks = *links;
 
     if (!read_yaml_macros_and_links)
     {
         begin_html_and_head(output, *vars, *vars_count);
         add_css(output, *vars, *vars_count);
-        end_head_start_body((output));
+        end_head_start_body(output);
     }
 
     do
@@ -325,15 +399,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
 
         lineno++;
         colno = 1;
-
-        /*
-         *fprintf(stderr, "=D: s:0x%X, hl:%d, et:%s, flid:%s, plb:%s \n", 
-         *        state,
-         *        heading_level,
-         *        end_tag ? "T" : "F",
-         *        first_line_in_doc ? "T" : "F",
-         *        previous_line_blank ? "T" : "F");
-         */
+        processed_starting_newline = FALSE;
 
         while (pline && *pline)
         {
@@ -361,6 +427,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                     colno++;
                 }
                 break;
+
             case ':':
                 if (state & ST_YAML
                         && !(state & ST_YAML_VAL)
@@ -385,12 +452,19 @@ slweb_parse(uint8_t* buffer, FILE* output,
                     ptoken = init_string(&token);
                     pline++;
                     colno++;
+
+                    while (pline && (*pline == ' ' || *pline == '\t'))
+                    {
+                        pline++;
+                        colno++;
+                    }
                 }
                 else {
                     *ptoken++ = *pline++;
                     colno++;
                 }
                 break;
+
             case '`':
                 if (colno == 1 
                         && u8_strlen(pline) > 2
@@ -436,6 +510,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                     colno++;
                 }
                 break;
+
             case '#':
                 if (colno == 1
                         && !(state & (ST_PRE | ST_YAML)))
@@ -458,29 +533,28 @@ slweb_parse(uint8_t* buffer, FILE* output,
                     colno++;
                 }
                 break;
+
             case '_':
-                if (state & (ST_TAG | ST_YAML | ST_PRE | ST_CODE))
+                if (read_yaml_macros_and_links
+                        || state & (ST_TAG | ST_PRE | ST_CODE))
                 {
                     *ptoken++ = *pline++;
                     colno++;
                     break;
                 }
 
-                if (u8_strlen(pline) > 1
-                        && *(pline+1) == '_')
+                if (u8_strlen(pline) > 1 && *(pline+1) == '_')
                 {
                     *ptoken = '\0';
                     if (state & ST_BOLD)
                     {
-                        u8_strncat(ptoken, (uint8_t*)"</strong>", 
-                                strlen("</strong>"));
+                        u8_strncat(ptoken, (uint8_t*)"</strong>", strlen("</strong>"));
                         ptoken += strlen("</strong>");
                         state &= ~ST_BOLD;
                     }
                     else
                     {
-                        u8_strncat(ptoken, (uint8_t*)"<strong>", 
-                                strlen("<strong>"));
+                        u8_strncat(ptoken, (uint8_t*)"<strong>", strlen("<strong>"));
                         ptoken += strlen("<strong>");
                         state |= ST_BOLD;
                     }
@@ -492,15 +566,13 @@ slweb_parse(uint8_t* buffer, FILE* output,
                     *ptoken = '\0';
                     if (state & ST_ITALIC)
                     {
-                        u8_strncat(ptoken, (uint8_t*)"</em>", 
-                                strlen("</em>"));
+                        u8_strncat(ptoken, (uint8_t*)"</em>", strlen("</em>"));
                         ptoken += strlen("</em>");
                         state &= ~ST_ITALIC;
                     }
                     else
                     {
-                        u8_strncat(ptoken, (uint8_t*)"<em>", 
-                                strlen("<em>"));
+                        u8_strncat(ptoken, (uint8_t*)"<em>", strlen("<em>"));
                         ptoken += strlen("<em>");
                         state |= ST_ITALIC;
                     }
@@ -508,29 +580,28 @@ slweb_parse(uint8_t* buffer, FILE* output,
                     colno += 2;
                 }
                 break;
+
             case '*':
-                if (state & (ST_TAG | ST_YAML | ST_PRE | ST_CODE))
+                if (read_yaml_macros_and_links
+                        || state & (ST_TAG | ST_PRE | ST_CODE))
                 {
                     *ptoken++ = *pline++;
                     colno++;
                     break;
                 }
 
-                if (u8_strlen(pline) > 1
-                        && *(pline+1) == '*')
+                if (u8_strlen(pline) > 1 && *(pline+1) == '*')
                 {
                     *ptoken = '\0';
                     if (state & ST_BOLD)
                     {
-                        u8_strncat(ptoken, (uint8_t*)"</strong>", 
-                                strlen("</strong>"));
+                        u8_strncat(ptoken, (uint8_t*)"</strong>", strlen("</strong>"));
                         ptoken += strlen("</strong>");
                         state &= ~ST_BOLD;
                     }
                     else
                     {
-                        u8_strncat(ptoken, (uint8_t*)"<strong>", 
-                                strlen("<strong>"));
+                        u8_strncat(ptoken, (uint8_t*)"<strong>", strlen("<strong>"));
                         ptoken += strlen("<strong>");
                         state |= ST_BOLD;
                     }
@@ -542,15 +613,13 @@ slweb_parse(uint8_t* buffer, FILE* output,
                     *ptoken = '\0';
                     if (state & ST_ITALIC)
                     {
-                        u8_strncat(ptoken, (uint8_t*)"</em>", 
-                                strlen("</em>"));
+                        u8_strncat(ptoken, (uint8_t*)"</em>", strlen("</em>"));
                         ptoken += strlen("</em>");
                         state &= ~ST_ITALIC;
                     }
                     else
                     {
-                        u8_strncat(ptoken, (uint8_t*)"<em>", 
-                                strlen("<em>"));
+                        u8_strncat(ptoken, (uint8_t*)"<em>", strlen("<em>"));
                         ptoken += strlen("<em>");
                         state |= ST_ITALIC;
                     }
@@ -558,6 +627,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                     colno += 2;
                 }
                 break;
+
             case ' ':
                 if (u8_strlen(pline) == 2)
                 {
@@ -579,24 +649,39 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 pline++;
                 colno++;
                 break;
+
             case '{':
-                if (state & (ST_PRE | ST_YAML | ST_HEADING))
+                if (read_yaml_macros_and_links
+                        || state & (ST_PRE | ST_HEADING))
                 {
                     *ptoken++ = *pline++;
                     colno++;
                     break;
                 }
 
+                /* Output existing text up to { */
+                if (*token)
+                {
+                    process_text_token(&state, &first_line_in_doc,
+                            previous_line_blank, &print_newline,
+                            processed_starting_newline,
+                            read_yaml_macros_and_links,
+                            output,
+                            &token,
+                            &ptoken);
+                    processed_starting_newline = TRUE;
+                }
+
                 state |= ST_TAG;
-                if (!read_yaml_macros_and_links && token[0])
-                    finish_and_print_token(&token, &ptoken, output);
                 ptoken = init_string(&token);
+
                 pline++;
                 colno++;
                 break;
 
             case '/':
-                if (state & (ST_PRE | ST_YAML | ST_HEADING))
+                if (read_yaml_macros_and_links
+                        || state & (ST_PRE | ST_HEADING))
                 {
                     *ptoken++ = *pline++;
                     colno++;
@@ -618,7 +703,8 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 break;
 
             case '}':
-                if (state & (ST_PRE | ST_YAML | ST_HEADING))
+                if (read_yaml_macros_and_links
+                        || state & (ST_PRE | ST_HEADING))
                 {
                     *ptoken++ = *pline++;
                     colno++;
@@ -638,14 +724,172 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 colno++;
                 break;
 
+            case '!':
+                if (state & (ST_PRE | ST_HEADING | ST_CODE))
+                {
+                    *ptoken++ = *pline++;
+                    colno++;
+                    break;
+                }
+
+                /* Output existing text up to ! */
+                *ptoken = '\0';
+                if (!read_yaml_macros_and_links)
+                    fprintf(output, "%s", token);
+                ptoken = init_string(&token);
+
+                if (u8_strlen(pline) > 1 && *(pline+1) == '[')
+                {
+                    state |= ST_IMAGE;
+                    pline += 2;
+                    colno += 2;
+                }
+                else 
+                {
+                    *ptoken++ = *pline++;
+                    colno++;
+                }
+
+                break;
+
+            case '[':
+                if (state & (ST_PRE | ST_HEADING | ST_CODE))
+                {
+                    *ptoken++ = *pline++;
+                    colno++;
+                    break;
+                }
+
+                /* Output existing text up to [ */
+                if (*token)
+                {
+                    process_text_token(&state, &first_line_in_doc,
+                            previous_line_blank, &print_newline,
+                            processed_starting_newline,
+                            read_yaml_macros_and_links,
+                            output,
+                            &token,
+                            &ptoken);
+                    processed_starting_newline = TRUE;
+                }
+
+                state |= ST_LINK;
+                ptoken = init_string(&token);
+
+                pline++;
+                colno++;
+                break;
+
+            case ')':
+                if (!(state & (ST_LINK_SECOND_ARG | ST_IMAGE_SECOND_ARG)))
+                {
+                    *ptoken++ = *pline++;
+                    colno++;
+                    break;
+                }
+
+                *ptoken = '\0';
+                if (!read_yaml_macros_and_links)
+                {
+                    if (state & ST_LINK_SECOND_ARG)
+                        process_inline_link(link_text, token, output);
+                    else
+                        process_inline_image(link_text, token, output);
+                }
+                ptoken = init_string(&token);
+                state &= ~(ST_LINK | ST_LINK_SECOND_ARG 
+                        | ST_IMAGE | ST_IMAGE_SECOND_ARG);
+                pline++;
+                colno++;
+                break;
+
+            case ']':
+                if (!(state & (ST_LINK | ST_IMAGE)))
+                {
+                    *ptoken++ = *pline++;
+                    colno++;
+                    break;
+                }
+
+                *ptoken = '\0';
+                if (state & ST_LINK_SECOND_ARG)
+                {
+                    if (!read_yaml_macros_and_links)
+                        process_link(link_text, token, *links, *links_count, 
+                                output);
+                    ptoken = init_string(&token);
+                    state &= ~(ST_LINK | ST_LINK_SECOND_ARG);
+                    pline++;
+                    colno++;
+                }
+                else if (state & ST_IMAGE_SECOND_ARG)
+                {
+                    if (!read_yaml_macros_and_links)
+                        process_image(link_text, token, *links, *links_count, 
+                                output);
+                    ptoken = init_string(&token);
+                    state &= ~(ST_IMAGE | ST_IMAGE_SECOND_ARG);
+                    pline++;
+                    colno++;
+                }
+                else if (u8_strlen(pline) > 1)
+                {
+                    switch (*(pline+1))
+                    {
+                        case ':':
+                            (*links_count)++;
+
+                            if (*links_count > 1)
+                            {
+                                *links = (KeyValue*) realloc(*links,
+                                        *links_count * sizeof(KeyValue));
+                                plinks = *links + *links_count - 1;
+                            }
+                            plinks->key = (uint8_t*) calloc(u8_strlen(token),
+                                    sizeof(uint8_t));
+                            u8_strcpy(plinks->key, token);
+                            plinks->value = NULL;
+                            pline += 2;
+                            colno += 2;
+                            while (pline && (*pline == ' ' || *pline == '\t'))
+                            {
+                                pline++;
+                                colno++;
+                            }
+                            ptoken = init_string(&token);
+                            state |= ST_LINK_SECOND_ARG;
+                            break;
+
+                        case '[':
+                        case '(':
+                            if (link_text)
+                                link_text = (uint8_t*) realloc(link_text,
+                                        u8_strlen(token) * sizeof(uint8_t));
+                            else
+                                link_text = (uint8_t*) calloc(u8_strlen(token),
+                                        sizeof(uint8_t));
+                            if (!link_text)
+                                return error(ENOMEM, 
+                                        (uint8_t*)"Memory allocation failed (out of memory?)\n");
+                            u8_strcpy(link_text, token);
+                            pline += 2;
+                            colno += 2;
+                            ptoken = init_string(&token);
+                            if (state & ST_LINK)
+                                state |= ST_LINK_SECOND_ARG;
+                            else
+                                state |= ST_IMAGE_SECOND_ARG;
+                            break;
+                        default:
+                            *ptoken++ = *pline++;
+                            colno++;
+                            state &= ~(ST_LINK | ST_IMAGE);
+                            break;
+                    }
+                }
+                break;
+
             default:
-                /*
-                 *fprintf(stderr, "line=[%s]\n",
-                 *        (char*)line);
-                 *fprintf(stderr, "ptoken=*pline=0x%X [%c]\n",
-                 *        (char)*pline,
-                 *        (char)*pline);
-                 */
                 *ptoken++ = *pline++;
                 colno++;
             }
@@ -655,18 +899,19 @@ slweb_parse(uint8_t* buffer, FILE* output,
         {
             if (token[0])
             {
-                if (!read_yaml_macros_and_links
+                if (!processed_starting_newline
+                        && !read_yaml_macros_and_links
                         && colno != 1 && !(state & ST_PRE))
                     fprintf(output, "\n");
 
-                /*
-                 *fprintf(stderr, "rymal=%s\n",
-                 *        read_yaml_macros_and_links ? "TRUE" : "FALSE");
-                 *fprintf(stderr, "state = 0x%X\n", state);
-                 *fprintf(stderr, "token=[%s]\n",
-                 *        token);
-                 */
-                if (state & ST_HEADING)
+                if (state & ST_LINK_SECOND_ARG)
+                {
+                    *ptoken = '\0';
+                    plinks->value = (uint8_t*) calloc(u8_strlen(token),
+                            sizeof(uint8_t));
+                    u8_strcpy(plinks->value, token);
+                }
+                else if (state & ST_HEADING)
                 {
                     state &= ~ST_HEADING;
                     *ptoken = '\0';
@@ -677,19 +922,15 @@ slweb_parse(uint8_t* buffer, FILE* output,
                     heading_level = 0;
                     print_newline = TRUE;
                 }
-                else {
-
-                    if (first_line_in_doc || previous_line_blank
-                            && !(state & ST_PRE))
-                    {
-                        if (!read_yaml_macros_and_links)
-                            fprintf(output, "<p>");
-                        first_line_in_doc = FALSE;
-                        state |= ST_PARA_OPEN;
-                    }
-                    if (!read_yaml_macros_and_links)
-                        finish_and_print_token(&token, &ptoken, output);
-                    print_newline = state & (ST_PRE | ST_CODE);
+                else 
+                {
+                    process_text_token(&state, &first_line_in_doc,
+                            previous_line_blank, &print_newline,
+                            processed_starting_newline,
+                            read_yaml_macros_and_links,
+                            output,
+                            &token,
+                            &ptoken);
                 }
                 previous_line_blank = FALSE;
             }
@@ -709,8 +950,9 @@ slweb_parse(uint8_t* buffer, FILE* output,
             else
                 previous_line_blank = FALSE;
 
-            if (!read_yaml_macros_and_links 
-                    && (print_newline || (state & ST_PRE)))
+            processed_starting_newline = TRUE;
+
+            if (!read_yaml_macros_and_links && (print_newline || (state & ST_PRE)))
             {
                 fprintf(output, "\n");
                 print_newline = FALSE;
@@ -724,12 +966,6 @@ slweb_parse(uint8_t* buffer, FILE* output,
             pvars->value = (uint8_t*) calloc(u8_strlen(token)+1, 
                     sizeof(uint8_t));
             u8_strcpy(pvars->value, token);
-            /*
-             *fprintf(stderr, "pvars[%d] = [%s -> %s]\n",
-             *        *vars_count-1,
-             *        pvars->key,
-             *        pvars->value);
-             */
         }
 
         ptoken = init_string(&token);
@@ -738,7 +974,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
             previous_line_blank = TRUE;
 
         /* Lasts until the end of line */
-        state &= ~ST_YAML_VAL;
+        state &= ~(ST_YAML_VAL | ST_LINK | ST_LINK_SECOND_ARG);
     }
     while (pbuffer && *pbuffer);
 
@@ -867,7 +1103,7 @@ main(int argc, char** argv)
     size_t vars_count = 0;
     KeyValue* macros = NULL;
     size_t macros_count = 0;
-    uint8_t** links = NULL;
+    KeyValue* links = NULL;
     size_t links_count = 0;
 
     vars = (KeyValue*) calloc(1, sizeof(KeyValue));
@@ -884,10 +1120,12 @@ main(int argc, char** argv)
     macros->key = NULL;
     macros->value = NULL;
 
-    links = (uint8_t**) calloc(1, sizeof(uint8_t*));
+    links = (KeyValue*) calloc(1, sizeof(KeyValue));
     if (!links)
         return error(ENOMEM, 
                 (uint8_t*)"Memory allocation failed (out of memory?)\n");
+    links->key = NULL;
+    links->value = NULL;
 
     /* First pass: read YAML, macros and links */
     slweb_parse(buffer, output, &vars, &vars_count, &macros, &macros_count,
@@ -899,4 +1137,4 @@ main(int argc, char** argv)
             &macros, &macros_count, &links, &links_count,
             body_only, FALSE);
 }
-
+ 

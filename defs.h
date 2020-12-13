@@ -63,17 +63,21 @@ typedef struct
 #pragma GCC diagnostic ignored "-Wunused-const-variable"
 const UBYTE MAX_HEADING_LEVEL = 4;
 
-const USHORT ST_NONE       = 0;
-const USHORT ST_YAML       = 1;
-const USHORT ST_YAML_VAL   = 1 << 1;
-const USHORT ST_PARA_OPEN  = 1 << 2;
-const USHORT ST_TAG        = 1 << 3;
-const USHORT ST_HEADING    = 1 << 4;
-const USHORT ST_BOLD       = 1 << 5;
-const USHORT ST_ITALIC     = 1 << 6;
-const USHORT ST_PRE        = 1 << 7;
-const USHORT ST_CODE       = 1 << 8;
-const USHORT ST_BLOCKQUOTE = 1 << 9;
+const USHORT ST_NONE             = 0;
+const USHORT ST_YAML             = 1;
+const USHORT ST_YAML_VAL         = 1 << 1;
+const USHORT ST_PARA_OPEN        = 1 << 2;
+const USHORT ST_TAG              = 1 << 3;
+const USHORT ST_HEADING          = 1 << 4;
+const USHORT ST_BOLD             = 1 << 5;
+const USHORT ST_ITALIC           = 1 << 6;
+const USHORT ST_PRE              = 1 << 7;
+const USHORT ST_CODE             = 1 << 8;
+const USHORT ST_BLOCKQUOTE       = 1 << 9;
+const USHORT ST_LINK             = 1 << 10;
+const USHORT ST_LINK_SECOND_ARG  = 1 << 11;
+const USHORT ST_IMAGE            = 1 << 12;
+const USHORT ST_IMAGE_SECOND_ARG = 1 << 13;
 #pragma GCC diagnostic pop
 
 #endif /* __DEFS_H */
