@@ -19,7 +19,7 @@ $ make && sudo make install
 
 ## Examples
 
-See the [`examples/`](https://github.com/Strahinja/slweb/tree/master/examples) directory in this repository.
+See the [`examples/`][1] directory in this repository.
 
 Given the file `index.slw` in the current directory:
 
@@ -66,6 +66,17 @@ file `index.html` contains:
 &lt;/html&gt;
 ```
 
+## TODO (checklist)
+
+See the file [`TODO`][2] for more information.
+
+
+## Bugs and limitations
+
+Bugs can be reported using the [Github issue tracker][3]. See the manpage (`man
+slweb`) after installing **slweb** for more information.
+
+
 ## License
 
 slweb - Simple static website generator.  
@@ -87,4 +98,8 @@ this program. If not, see &lt;https://www.gnu.org/licenses/&gt;.
 
 {made-by}
 {/main}
+
+[1]: https://github.com/Strahinja/slweb/tree/master/examples
+[2]: https://github.com/Strahinja/slweb/tree/master/TODO
+[3]: https://github.com/Strahinja/slweb/issues
 

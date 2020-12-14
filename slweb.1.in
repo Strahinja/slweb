@@ -18,9 +18,8 @@ slweb Copyright \(co 2020 Strahinya Radich.
 .
 .SH DESCRIPTION
 .B Slweb
-is a static website generator which aims at being simplistic. It uses
-.BR sed (1)
-to transform a custom Markdown-like syntax into
+is a static website generator which aims at being simplistic. It transforms 
+custom Markdown-like syntax into
 .SM HTML.
 .
 .SH OPTIONS
@@ -78,15 +77,15 @@ A line starting with \fC#\fR followed by space will be put inside
 hashtags.
 .
 .IP \[bu]
-.BR "Bold/italic (limited)" .
+.BR Bold/italic .
 Text inside \fC*asterisks*\fR or \fC_underlines_\fR will be put inside
-\fC<em></em>\fR. Text inside \fC**double asterisks**\fR will be put inside
-\fC<strong></strong>\fR.
+\fC<em></em>\fR. Text inside \fC**double asterisks**\fR or \fC__double
+underlines__\fR will be put inside \fC<strong></strong>\fR.
 .
 .IP \[bu]
 .BR Backticks .
-Text inside \fC`backticks`\fR will be put inside \fC<code></code>\fR (one per
-line, both backticks need to be on the same line).
+Text inside \fC`backticks`\fR will be put inside \fC<code></code>\fR (both
+backticks need to be on the same line).
 .
 .IP \[bu]
 .BR "Blockquotes" .
@@ -94,7 +93,7 @@ Starting the line with \fC>\fR will surround it with a \fC<blockquote>\fR tag.
 Multiple lines are supported.
 .
 .IP \[bu]
-.BR "Links (limited)" .
+.BR Links .
 The construct \fC[A link](https://example.com)\fR will be converted into \fC<a
 href="https://example.com">A link</a>\fR.
 
@@ -315,6 +314,18 @@ file \fCindex.html\fR contains:
 .EE
 .
 .SH "KNOWN LIMITATIONS"
+.
+.IP \[bu] 4
+As of v0.3.0, 
+.B slweb 
+is undergoing a migration from Bash script using
+.BR sed (1)
+to a C program. Not all old features will be working or working as intended
+until this migration is complete. See the file
+.SM TODO
+in the Github repository and the
+.SM BUGS
+section below.
 .
 .IP \[bu] 4
 Currently there is no way to determine where the paragraph inside a tag should

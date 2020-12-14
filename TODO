@@ -1,0 +1,18 @@
+                                      TODO
+                                      ====
+
+Migration to C checklist
+------------------------
+
+    [ ] Add {=macro} parsing
+    [ ] Add [=command Link](link) form of links
+    [ ] Add [(Link)](link) form of links
+    [ ] Add {include} processing
+    [ ] Add {.class} processing
+    [ ] Add {#id} processing
+    [ ] Convert strncat token processing to individual token-based
+    [ ] Add {lsdir}
+    [ ] Add title: processing
+    [ ] Update manpage
+    [ ] Add backslash-escaping of blank lines for normal tags
+

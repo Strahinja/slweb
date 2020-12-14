@@ -116,24 +116,13 @@ set_basedir(char* arg, char** basedir)
     return 0;
 }
 
-uint8_t*
-init_string(uint8_t** str)
-{
-    if (!str || !*str)
-        return NULL;
-
-    *str[0] = '\0';
-
-    return *str;
-}
-
 int
 finish_and_print_token(uint8_t** token, uint8_t** ptoken, FILE* output)
 {
     if (!token || !*token || !ptoken || !*ptoken)
         return 1;
 
-    *ptoken[0] = '\0';
+    **ptoken = '\0';
     fprintf(output, "%s", *token);
 
     return 0;
@@ -395,7 +384,8 @@ slweb_parse(uint8_t* buffer, FILE* output,
         *pline = '\0';
         pline = line;
         line_len = u8_strlen(line);
-        ptoken = init_string(&token);
+        *token = '\0';
+        ptoken = token;
 
         lineno++;
         colno = 1;
@@ -449,7 +439,8 @@ slweb_parse(uint8_t* buffer, FILE* output,
                     pvars->value = NULL;
 
                     state |= ST_YAML_VAL;
-                    ptoken = init_string(&token);
+                    *token = '\0';
+                    ptoken = token;
                     pline++;
                     colno++;
 
@@ -673,7 +664,8 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 }
 
                 state |= ST_TAG;
-                ptoken = init_string(&token);
+                *token = '\0';
+                ptoken = token;
 
                 pline++;
                 colno++;
@@ -717,7 +709,8 @@ slweb_parse(uint8_t* buffer, FILE* output,
                     process_tag(token, output, end_tag);
                 first_line_in_doc = FALSE;
                 print_newline = TRUE;
-                ptoken = init_string(&token);
+                *token = '\0';
+                ptoken = token;
                 end_tag = FALSE;
 
                 pline++;
@@ -736,7 +729,8 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 *ptoken = '\0';
                 if (!read_yaml_macros_and_links)
                     fprintf(output, "%s", token);
-                ptoken = init_string(&token);
+                *token = '\0';
+                ptoken = token;
 
                 if (u8_strlen(pline) > 1 && *(pline+1) == '[')
                 {
@@ -774,7 +768,9 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 }
 
                 state |= ST_LINK;
-                ptoken = init_string(&token);
+
+                *token = '\0';
+                ptoken = token;
 
                 pline++;
                 colno++;
@@ -796,7 +792,8 @@ slweb_parse(uint8_t* buffer, FILE* output,
                     else
                         process_inline_image(link_text, token, output);
                 }
-                ptoken = init_string(&token);
+                *token = '\0';
+                ptoken = token;
                 state &= ~(ST_LINK | ST_LINK_SECOND_ARG 
                         | ST_IMAGE | ST_IMAGE_SECOND_ARG);
                 pline++;
@@ -817,7 +814,8 @@ slweb_parse(uint8_t* buffer, FILE* output,
                     if (!read_yaml_macros_and_links)
                         process_link(link_text, token, *links, *links_count, 
                                 output);
-                    ptoken = init_string(&token);
+                    *token = '\0';
+                    ptoken = token;
                     state &= ~(ST_LINK | ST_LINK_SECOND_ARG);
                     pline++;
                     colno++;
@@ -827,7 +825,8 @@ slweb_parse(uint8_t* buffer, FILE* output,
                     if (!read_yaml_macros_and_links)
                         process_image(link_text, token, *links, *links_count, 
                                 output);
-                    ptoken = init_string(&token);
+                    *token = '\0';
+                    ptoken = token;
                     state &= ~(ST_IMAGE | ST_IMAGE_SECOND_ARG);
                     pline++;
                     colno++;
@@ -856,7 +855,8 @@ slweb_parse(uint8_t* buffer, FILE* output,
                                 pline++;
                                 colno++;
                             }
-                            ptoken = init_string(&token);
+                            *token = '\0';
+                            ptoken = token;
                             state |= ST_LINK_SECOND_ARG;
                             break;
 
@@ -874,7 +874,8 @@ slweb_parse(uint8_t* buffer, FILE* output,
                             u8_strcpy(link_text, token);
                             pline += 2;
                             colno += 2;
-                            ptoken = init_string(&token);
+                            *token = '\0';
+                            ptoken = token;
                             if (state & ST_LINK)
                                 state |= ST_LINK_SECOND_ARG;
                             else
@@ -897,7 +898,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
 
         if (!(state & ST_YAML))
         {
-            if (token[0])
+            if (*token)
             {
                 if (!processed_starting_newline
                         && !read_yaml_macros_and_links
@@ -918,7 +919,8 @@ slweb_parse(uint8_t* buffer, FILE* output,
                     if (!read_yaml_macros_and_links)
                         process_heading(token, output, heading_level);
                     first_line_in_doc = FALSE;
-                    ptoken = init_string(&token);
+                    *token = '\0';
+                    ptoken = token;
                     heading_level = 0;
                     print_newline = TRUE;
                 }
@@ -959,7 +961,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
             }
 
         }
-        else if (token[0] && read_yaml_macros_and_links
+        else if (*token && read_yaml_macros_and_links
                 && state & ST_YAML_VAL)
         {
             *ptoken = '\0';
@@ -968,7 +970,8 @@ slweb_parse(uint8_t* buffer, FILE* output,
             u8_strcpy(pvars->value, token);
         }
 
-        ptoken = init_string(&token);
+        *token = '\0';
+        ptoken = token;
 
         if (line_len == 0)
             previous_line_blank = TRUE;
@@ -1000,7 +1003,7 @@ main(int argc, char** argv)
     basedir = (char*) calloc(2, sizeof(char));
     if (!basedir)
         return error(ENOMEM, (uint8_t*)"Memory allocation failed (out of memory?)\n");
-    basedir[0] = '.';
+    *basedir = '.';
 
     while ((arg = *++argv))
     {
