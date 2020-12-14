@@ -19,6 +19,7 @@
 
 #include "defs.h"
 #include <stdint.h>
+#include <unistdio.h>
 
 static size_t lineno = 0;
 static size_t colno = 1;
@@ -146,34 +147,34 @@ process_tag(uint8_t* token, FILE* output, BOOL end_tag)
     if (!token || u8_strlen(token) < 1)
         return warning(1, (uint8_t*)"No tag\n");
 
-    char* basename = (char*) calloc(strlen(filename), sizeof(char));
-    char* slash = strrchr(filename, '/');
+    uint8_t* basename = (uint8_t*) calloc(strlen(filename), sizeof(uint8_t));
+    uint8_t* slash = u8_strrchr((uint8_t*)filename, '/');
     if (slash)
-        strcpy(basename, slash+1);
+        u8_strncpy(basename, slash+1, u8_strlen(slash+1));
     else
-        strcpy(basename, filename);
+        u8_strncpy(basename, filename, u8_strlen((uint8_t*)filename));
 
     if (!strcmp((char*)token, "git-log"))
     {
         fprintf(output, "<div id=\"git-log\">\nPrevious commit:\n");
-        char* command = (char*) calloc(BUFSIZE, sizeof(char));
-        sprintf(command, 
+        uint8_t* command = (uint8_t*) calloc(BUFSIZE, sizeof(uint8_t));
+        u8_snprintf(command, BUFSIZE,
                 "git log -1 --pretty=format:\"%s %%h %%ci (%%cn) %%d\""
                 " || echo \"(Not in a Git repository)\"",
             basename);
-        FILE* cmd_output = popen(command, "r");
+        FILE* cmd_output = popen((char*)command, "r");
         if (!cmd_output)
         {
             perror(PROGRAMNAME);
             return error(1, (uint8_t*)"Cannot popen\n");
         }
-        char* cmd_output_line = (char*) calloc(BUFSIZE, sizeof(char));
+        uint8_t* cmd_output_line = (uint8_t*) calloc(BUFSIZE, sizeof(uint8_t));
         while (!feof(cmd_output))
         {
-            if (!fgets(cmd_output_line, BUFSIZE, cmd_output))
+            if (!fgets((char*)cmd_output_line, BUFSIZE, cmd_output))
                 continue;
 
-            char* eol = strchr(cmd_output_line, '\n');
+            char* eol = strchr((char*)cmd_output_line, '\n');
             if (eol)
                 *eol = '\0';
 
@@ -196,11 +197,85 @@ process_tag(uint8_t* token, FILE* output, BOOL end_tag)
                 "</div><!--made-by-->\n");
     }
     else
-        fprintf(output, "<%s%s>", end_tag ? (const char*)"/" : (const char*)"",
-                token);
+    {
+        uint8_t* attr_id = u8_strchr(token, (ucs4_t)'#');
+        uint8_t* attr_class = u8_strchr(token, (ucs4_t)'.');
+
+        fprintf(output, "<");
+        if (end_tag)
+            fprintf(output, "/");
+
+        if (*token == '.' || *token == '#')
+        {
+            fprintf(output, "div");
+        }
+
+        while (*token && *token != '#' && *token != '.')
+            fprintf(output, "%c", *token++);
+
+        if (!end_tag)
+        {
+            if (*token == '#')
+            {
+                token++;
+                fprintf(output, " id=\"");
+                while (*token && *token != '.')
+                    fprintf(output, "%c", *token++);
+                fprintf(output, "\"");
+
+                if (*token == '.')
+                {
+                    token++;
+                    fprintf(output, " class=\"");
+                    while (*token)
+                        fprintf(output, "%c", *token++);
+                    fprintf(output, "\"");
+                }
+            }
+            else if (*token == '.')
+            {
+                token++;
+                fprintf(output, " class=\"");
+                while (*token && *token != '#')
+                    fprintf(output, "%c", *token++);
+                fprintf(output, "\"");
+                if (*token == '#')
+
+                {
+                    token++;
+                    fprintf(output, " id=\"");
+                    while (*token)
+                        fprintf(output, "%c", *token++);
+                    fprintf(output, "\"");
+                }
+            }
+        }
+        fprintf(output, ">");
+    }
 
     free(basename);
 
+    return 0;
+}
+
+int
+process_bold(FILE* output, BOOL end_tag)
+{
+    fprintf(output, "<%sstrong>", end_tag ? "/" : "");
+    return 0;
+}
+
+int
+process_italic(FILE* output, BOOL end_tag)
+{
+    fprintf(output, "<%sem>", end_tag ? "/" : "");
+    return 0;
+}
+
+int
+process_blockquote(FILE* output, BOOL end_tag)
+{
+    fprintf(output, "<%sblockquote>", end_tag ? "/" : "");
     return 0;
 }
 
@@ -242,28 +317,42 @@ process_inline_image(uint8_t* image_text, uint8_t* image_url, FILE* output)
 }
 
 int
-process_text_token(USHORT* state, 
-        BOOL* first_line_in_doc, 
-        BOOL previous_line_blank,
-        BOOL* print_newline,
-        BOOL processed_starting_newline,
-        BOOL read_yaml_macros_and_links,
-        FILE* output,
+process_line_start(USHORT* state, BOOL* first_line_in_doc,
+        BOOL previous_line_blank, BOOL processed_start_of_line,
+        BOOL read_yaml_macros_and_links, FILE* output,
         uint8_t** token,
         uint8_t** ptoken)
 {
     if ((*first_line_in_doc || previous_line_blank)
-            && !processed_starting_newline
-            && !(*state & ST_PRE))
+            && !processed_start_of_line
+            && !(*state & (ST_PRE | ST_BLOCKQUOTE)))
     {
         if (!read_yaml_macros_and_links)
             fprintf(output, "<p>");
         *first_line_in_doc = FALSE;
         *state |= ST_PARA_OPEN;
     }
-    if (!read_yaml_macros_and_links)
-        finish_and_print_token(token, ptoken, output);
-    *print_newline = *state & (ST_PRE | ST_CODE);
+    return 0;
+}
+
+int
+process_text_token(USHORT* state, 
+        BOOL* first_line_in_doc, 
+        BOOL previous_line_blank,
+        BOOL processed_start_of_line,
+        BOOL read_yaml_macros_and_links,
+        FILE* output,
+        uint8_t** token,
+        uint8_t** ptoken)
+{
+    process_line_start(state, first_line_in_doc, previous_line_blank,
+            processed_start_of_line, read_yaml_macros_and_links,
+            output, token, ptoken);
+    **ptoken = '\0';
+    if (!read_yaml_macros_and_links && **token)
+        fprintf(output, "%s", *token);
+    **token = '\0';
+    *ptoken = *token;
     return 0;
 }
 
@@ -341,8 +430,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
     BOOL end_tag = FALSE;
     BOOL first_line_in_doc = TRUE;
     BOOL previous_line_blank = FALSE;
-    BOOL print_newline = FALSE;
-    BOOL processed_starting_newline = FALSE;
+    BOOL processed_start_of_line = FALSE;
 
     if (!buffer)
         return error(1, (uint8_t*)"Empty buffer\n");
@@ -389,7 +477,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
 
         lineno++;
         colno = 1;
-        processed_starting_newline = FALSE;
+        processed_start_of_line = FALSE;
 
         while (pline && *pline)
         {
@@ -470,7 +558,6 @@ slweb_parse(uint8_t* buffer, FILE* output,
                         else
                             fprintf(output, "</pre>");
                     }
-                    print_newline = TRUE;
 
                     pline += 3;
                     colno += 3;
@@ -536,39 +623,43 @@ slweb_parse(uint8_t* buffer, FILE* output,
 
                 if (u8_strlen(pline) > 1 && *(pline+1) == '_')
                 {
-                    *ptoken = '\0';
-                    if (state & ST_BOLD)
-                    {
-                        u8_strncat(ptoken, (uint8_t*)"</strong>", strlen("</strong>"));
-                        ptoken += strlen("</strong>");
-                        state &= ~ST_BOLD;
-                    }
-                    else
-                    {
-                        u8_strncat(ptoken, (uint8_t*)"<strong>", strlen("<strong>"));
-                        ptoken += strlen("<strong>");
-                        state |= ST_BOLD;
-                    }
+                    /* Output existing text up to __ */
+                    process_text_token(&state, &first_line_in_doc,
+                            previous_line_blank,
+                            processed_start_of_line,
+                            read_yaml_macros_and_links,
+                            output,
+                            &token,
+                            &ptoken);
+                    processed_start_of_line = TRUE;
+
+                    if (!read_yaml_macros_and_links 
+                            && !(state & (ST_PRE | ST_CODE | ST_HEADING)))
+                        process_bold(output, state & ST_BOLD);
+
+                    state ^= ST_BOLD;
                     pline += 2;
                     colno += 2;
                 }
                 else
                 {
-                    *ptoken = '\0';
-                    if (state & ST_ITALIC)
-                    {
-                        u8_strncat(ptoken, (uint8_t*)"</em>", strlen("</em>"));
-                        ptoken += strlen("</em>");
-                        state &= ~ST_ITALIC;
-                    }
-                    else
-                    {
-                        u8_strncat(ptoken, (uint8_t*)"<em>", strlen("<em>"));
-                        ptoken += strlen("<em>");
-                        state |= ST_ITALIC;
-                    }
-                    pline += 2;
-                    colno += 2;
+                    /* Output existing text up to _ */
+                    process_text_token(&state, &first_line_in_doc,
+                            previous_line_blank,
+                            processed_start_of_line,
+                            read_yaml_macros_and_links,
+                            output,
+                            &token,
+                            &ptoken);
+                    processed_start_of_line = TRUE;
+
+                    if (!read_yaml_macros_and_links 
+                            && !(state & (ST_PRE | ST_CODE | ST_HEADING)))
+                        process_italic(output, state & ST_ITALIC);
+
+                    state ^= ST_ITALIC;
+                    pline++;
+                    colno++;
                 }
                 break;
 
@@ -583,39 +674,43 @@ slweb_parse(uint8_t* buffer, FILE* output,
 
                 if (u8_strlen(pline) > 1 && *(pline+1) == '*')
                 {
-                    *ptoken = '\0';
-                    if (state & ST_BOLD)
-                    {
-                        u8_strncat(ptoken, (uint8_t*)"</strong>", strlen("</strong>"));
-                        ptoken += strlen("</strong>");
-                        state &= ~ST_BOLD;
-                    }
-                    else
-                    {
-                        u8_strncat(ptoken, (uint8_t*)"<strong>", strlen("<strong>"));
-                        ptoken += strlen("<strong>");
-                        state |= ST_BOLD;
-                    }
+                    /* Output existing text up to * */
+                    process_text_token(&state, &first_line_in_doc,
+                            previous_line_blank,
+                            processed_start_of_line,
+                            read_yaml_macros_and_links,
+                            output,
+                            &token,
+                            &ptoken);
+                    processed_start_of_line = TRUE;
+
+                    if (!read_yaml_macros_and_links 
+                            && !(state & (ST_PRE | ST_CODE | ST_HEADING)))
+                        process_bold(output, state & ST_BOLD);
+
+                    state ^= ST_BOLD;
                     pline += 2;
                     colno += 2;
                 }
                 else
                 {
-                    *ptoken = '\0';
-                    if (state & ST_ITALIC)
-                    {
-                        u8_strncat(ptoken, (uint8_t*)"</em>", strlen("</em>"));
-                        ptoken += strlen("</em>");
-                        state &= ~ST_ITALIC;
-                    }
-                    else
-                    {
-                        u8_strncat(ptoken, (uint8_t*)"<em>", strlen("<em>"));
-                        ptoken += strlen("<em>");
-                        state |= ST_ITALIC;
-                    }
-                    pline += 2;
-                    colno += 2;
+                    /* Output existing text up to * */
+                    process_text_token(&state, &first_line_in_doc,
+                            previous_line_blank,
+                            processed_start_of_line,
+                            read_yaml_macros_and_links,
+                            output,
+                            &token,
+                            &ptoken);
+                    processed_start_of_line = TRUE;
+
+                    if (!read_yaml_macros_and_links 
+                            && !(state & (ST_PRE | ST_CODE | ST_HEADING)))
+                        process_italic(output, state & ST_ITALIC);
+
+                    state ^= ST_ITALIC;
+                    pline++;
+                    colno++;
                 }
                 break;
 
@@ -654,13 +749,13 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 if (*token)
                 {
                     process_text_token(&state, &first_line_in_doc,
-                            previous_line_blank, &print_newline,
-                            processed_starting_newline,
+                            previous_line_blank,
+                            processed_start_of_line,
                             read_yaml_macros_and_links,
                             output,
                             &token,
                             &ptoken);
-                    processed_starting_newline = TRUE;
+                    processed_start_of_line = TRUE;
                 }
 
                 state |= ST_TAG;
@@ -705,16 +800,37 @@ slweb_parse(uint8_t* buffer, FILE* output,
 
                 state &= ~ST_TAG;
                 *ptoken = '\0';
+
                 if (!read_yaml_macros_and_links)
                     process_tag(token, output, end_tag);
-                first_line_in_doc = FALSE;
-                print_newline = TRUE;
+
                 *token = '\0';
                 ptoken = token;
                 end_tag = FALSE;
 
                 pline++;
                 colno++;
+                break;
+
+            case '>':
+                if (!read_yaml_macros_and_links
+                        && !(state & (ST_PRE | ST_HEADING))
+                        && colno == 1)
+                {
+                    if (!read_yaml_macros_and_links 
+                            && !(state & ST_BLOCKQUOTE))
+                        process_blockquote(output, FALSE);
+
+                    state |= ST_BLOCKQUOTE;
+
+                    pline++;
+                    colno++;
+                }
+                else 
+                {
+                    *ptoken++ = *pline++;
+                    colno++;
+                }
                 break;
 
             case '!':
@@ -758,13 +874,13 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 if (*token)
                 {
                     process_text_token(&state, &first_line_in_doc,
-                            previous_line_blank, &print_newline,
-                            processed_starting_newline,
+                            previous_line_blank,
+                            processed_start_of_line,
                             read_yaml_macros_and_links,
                             output,
                             &token,
                             &ptoken);
-                    processed_starting_newline = TRUE;
+                    processed_start_of_line = TRUE;
                 }
 
                 state |= ST_LINK;
@@ -900,11 +1016,6 @@ slweb_parse(uint8_t* buffer, FILE* output,
         {
             if (*token)
             {
-                if (!processed_starting_newline
-                        && !read_yaml_macros_and_links
-                        && colno != 1 && !(state & ST_PRE))
-                    fprintf(output, "\n");
-
                 if (state & ST_LINK_SECOND_ARG)
                 {
                     *ptoken = '\0';
@@ -922,43 +1033,36 @@ slweb_parse(uint8_t* buffer, FILE* output,
                     *token = '\0';
                     ptoken = token;
                     heading_level = 0;
-                    print_newline = TRUE;
                 }
                 else 
                 {
                     process_text_token(&state, &first_line_in_doc,
-                            previous_line_blank, &print_newline,
-                            processed_starting_newline,
+                            previous_line_blank,
+                            processed_start_of_line,
                             read_yaml_macros_and_links,
                             output,
                             &token,
                             &ptoken);
                 }
-                previous_line_blank = FALSE;
             }
-            else if (colno == 1)
-            {
-                if (!previous_line_blank 
-                        && (state & ST_PARA_OPEN)
-                        && !(state & ST_PRE))
-                {
-                    if (!read_yaml_macros_and_links)
-                        fprintf(output, "</p>\n");
-                    print_newline = FALSE;
-                    state &= ~ST_PARA_OPEN;
-                }
-                previous_line_blank = TRUE;
-            }
-            else
-                previous_line_blank = FALSE;
 
-            processed_starting_newline = TRUE;
-
-            if (!read_yaml_macros_and_links && (print_newline || (state & ST_PRE)))
+            if ((state & ST_PARA_OPEN)
+                        && !(state & ST_PRE)
+                        && (!*pbuffer || *pbuffer == '\n'))
             {
-                fprintf(output, "\n");
-                print_newline = FALSE;
+                if (!read_yaml_macros_and_links)
+                    fprintf(output, "</p>");
+                state &= ~ST_PARA_OPEN;
             }
+
+            if (state & ST_BLOCKQUOTE 
+                    && (!*pbuffer || *pbuffer != '>'))
+            {
+                state &= ~ST_BLOCKQUOTE;
+                process_blockquote(output, TRUE);
+            }
+
+            previous_line_blank = FALSE;
 
         }
         else if (*token && read_yaml_macros_and_links
@@ -968,6 +1072,11 @@ slweb_parse(uint8_t* buffer, FILE* output,
             pvars->value = (uint8_t*) calloc(u8_strlen(token)+1, 
                     sizeof(uint8_t));
             u8_strcpy(pvars->value, token);
+        }
+
+        if (!read_yaml_macros_and_links && !(state & (ST_YAML | ST_YAML_VAL | ST_LINK_SECOND_ARG)))
+        {
+            fprintf(output, "\n");
         }
 
         *token = '\0';
@@ -982,9 +1091,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
     while (pbuffer && *pbuffer);
 
     if (!read_yaml_macros_and_links)
-    {
         end_body_and_html(output);
-    }
 
     free(line);
     free(token);
