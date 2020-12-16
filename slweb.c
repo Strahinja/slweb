@@ -203,9 +203,6 @@ process_tag(uint8_t* token, FILE* output, BOOL end_tag)
     }
     else
     {
-        uint8_t* attr_id = u8_strchr(token, (ucs4_t)'#');
-        uint8_t* attr_class = u8_strchr(token, (ucs4_t)'.');
-
         fprintf(output, "<");
         if (end_tag)
             fprintf(output, "/");
@@ -286,7 +283,6 @@ int
 process_link(uint8_t* link_text, uint8_t* link_id, KeyValue* links, 
         size_t links_count, FILE* output)
 {
-    KeyValue* plinks = links;
     uint8_t* url = get_value(links, links_count, link_id);
     fprintf(output, "<a href=\"%s\">%s</a>", 
             url ? (char*)url : "", link_text);
@@ -320,19 +316,18 @@ process_inline_image(uint8_t* image_text, uint8_t* image_url, FILE* output)
 }
 
 int
-process_line_start(USHORT* state, BOOL* first_line_in_doc,
+process_line_start(USHORT* state, BOOL first_line_in_doc,
         BOOL previous_line_blank, BOOL processed_start_of_line,
         BOOL read_yaml_macros_and_links, FILE* output,
         uint8_t** token,
         uint8_t** ptoken)
 {
-    if ((*first_line_in_doc || previous_line_blank)
+    if ((first_line_in_doc || previous_line_blank)
             && !processed_start_of_line
             && !(*state & (ST_PRE | ST_BLOCKQUOTE)))
     {
         if (!read_yaml_macros_and_links)
             fprintf(output, "<p>");
-        *first_line_in_doc = FALSE;
         *state |= ST_PARA_OPEN;
     }
     return 0;
@@ -340,7 +335,7 @@ process_line_start(USHORT* state, BOOL* first_line_in_doc,
 
 int
 process_text_token(USHORT* state, 
-        BOOL* first_line_in_doc, 
+        BOOL first_line_in_doc,
         BOOL previous_line_blank,
         BOOL processed_start_of_line,
         BOOL read_yaml_macros_and_links,
@@ -425,9 +420,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
     size_t line_len = 0;
     uint8_t* token = NULL;
     uint8_t* ptoken = NULL;
-    size_t token_len = 0;
     uint8_t* link_text = NULL;
-    uint8_t* link_url = NULL;
     KeyValue* pvars = NULL;
     KeyValue* plinks = NULL;
     USHORT state = ST_NONE;
@@ -456,6 +449,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
     pbuffer = buffer;
     pvars = *vars;
     plinks = *links;
+    lineno = 0;
 
     if (!read_yaml_macros_and_links)
     {
@@ -629,7 +623,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 if (u8_strlen(pline) > 1 && *(pline+1) == '_')
                 {
                     /* Output existing text up to __ */
-                    process_text_token(&state, &first_line_in_doc,
+                    process_text_token(&state, first_line_in_doc,
                             previous_line_blank,
                             processed_start_of_line,
                             read_yaml_macros_and_links,
@@ -650,7 +644,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 else
                 {
                     /* Output existing text up to _ */
-                    process_text_token(&state, &first_line_in_doc,
+                    process_text_token(&state, first_line_in_doc,
                             previous_line_blank,
                             processed_start_of_line,
                             read_yaml_macros_and_links,
@@ -682,7 +676,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 if (u8_strlen(pline) > 1 && *(pline+1) == '*')
                 {
                     /* Output existing text up to * */
-                    process_text_token(&state, &first_line_in_doc,
+                    process_text_token(&state, first_line_in_doc,
                             previous_line_blank,
                             processed_start_of_line,
                             read_yaml_macros_and_links,
@@ -703,7 +697,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 else
                 {
                     /* Output existing text up to * */
-                    process_text_token(&state, &first_line_in_doc,
+                    process_text_token(&state, first_line_in_doc,
                             previous_line_blank,
                             processed_start_of_line,
                             read_yaml_macros_and_links,
@@ -755,7 +749,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 }
 
                 /* Output existing text up to { */
-                process_text_token(&state, &first_line_in_doc,
+                process_text_token(&state, first_line_in_doc,
                         previous_line_blank,
                         processed_start_of_line,
                         read_yaml_macros_and_links,
@@ -877,15 +871,16 @@ slweb_parse(uint8_t* buffer, FILE* output,
                     break;
                 }
 
-                /* Output existing text up to [ */
-                process_text_token(&state, &first_line_in_doc,
-                        previous_line_blank,
-                        processed_start_of_line,
-                        read_yaml_macros_and_links,
-                        output,
-                        &token,
-                        &ptoken,
-                        TRUE);
+                if (*token)
+                    /* Output existing text up to [ */
+                    process_text_token(&state, first_line_in_doc,
+                            previous_line_blank,
+                            processed_start_of_line,
+                            read_yaml_macros_and_links,
+                            output,
+                            &token,
+                            &ptoken,
+                            TRUE);
                 processed_start_of_line = TRUE;
 
                 state |= ST_LINK;
@@ -1010,6 +1005,20 @@ slweb_parse(uint8_t* buffer, FILE* output,
                     }
                 }
                 break;
+            case '\\':
+                /*
+                 *if (state & (ST_PRE | ST_CODE | ST_LINK_SECOND_ARG))
+                 *{
+                 *    *ptoken++ = *pline++;
+                 *    colno++;
+                 *    break;
+                 *}
+                 */
+
+                /* TODO: Cases? */
+                pline++;
+                colno++;
+                break;
 
             default:
                 *ptoken++ = *pline++;
@@ -1041,7 +1050,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 }
                 else 
                 {
-                    process_text_token(&state, &first_line_in_doc,
+                    process_text_token(&state, first_line_in_doc,
                             previous_line_blank,
                             processed_start_of_line,
                             read_yaml_macros_and_links,
@@ -1088,6 +1097,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
         *token = '\0';
         ptoken = token;
 
+        first_line_in_doc = FALSE;
         if (line_len == 0)
             previous_line_blank = TRUE;
 

@@ -14,5 +14,5 @@ Migration to C checklist
     [ ] Add {lsdir}
     [ ] Add title: processing
     [ ] Update manpage
-    [ ] Add backslash-escaping of blank lines for normal tags
+    [x] Add backslash-escaping of blank lines for normal tags
 

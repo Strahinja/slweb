@@ -349,10 +349,10 @@ will produce
 .in +4
 .sp
 <tag>
-First paragraph</p>
+First paragraph
 
 <p>Second paragraph
-</tag>
+</tag></p>
 .in -4
 .sp
 .EE
