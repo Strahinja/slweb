@@ -427,6 +427,8 @@ slweb_parse(uint8_t* buffer, FILE* output,
     UBYTE heading_level = 0;
     BOOL end_tag = FALSE;
     BOOL first_line_in_doc = TRUE;
+    BOOL skip_change_first_line_in_doc = FALSE;
+    BOOL skip_eol = FALSE;
     BOOL previous_line_blank = FALSE;
     BOOL processed_start_of_line = FALSE;
 
@@ -477,6 +479,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
         lineno++;
         colno = 1;
         processed_start_of_line = FALSE;
+        skip_eol = FALSE;
 
         while (pline && *pline)
         {
@@ -490,10 +493,8 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 {
                     state ^= ST_YAML;
 
-                    if (state & ST_YAML)
-                        first_line_in_doc = FALSE;
-                    else 
-                        first_line_in_doc = TRUE;
+                    skip_change_first_line_in_doc = TRUE;
+                    skip_eol = TRUE;
 
                     pline += 3;
                     colno += 3;
@@ -1089,15 +1090,25 @@ slweb_parse(uint8_t* buffer, FILE* output,
             u8_strcpy(pvars->value, token);
         }
 
-        if (!read_yaml_macros_and_links && !(state & (ST_YAML | ST_YAML_VAL | ST_LINK_SECOND_ARG)))
+        if (!skip_eol)
         {
-            fprintf(output, "\n");
+            if (!read_yaml_macros_and_links 
+                    && !(state & (ST_YAML | ST_YAML_VAL 
+                            | ST_LINK_SECOND_ARG)))
+            {
+                fprintf(output, "\n");
+            }
         }
 
         *token = '\0';
         ptoken = token;
 
-        first_line_in_doc = FALSE;
+        if (!skip_change_first_line_in_doc
+                && !(state & ST_YAML))
+            first_line_in_doc = FALSE;
+
+        skip_change_first_line_in_doc = FALSE; 
+            ;
         if (line_len == 0)
             previous_line_blank = TRUE;
 

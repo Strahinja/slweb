@@ -24,6 +24,7 @@ See the [`examples/`][1] directory in this repository.
 Given the file `index.slw` in the current directory:
 
 ```
+---
 site-name: Test website
 site-desc: My first website in slweb
 ---
