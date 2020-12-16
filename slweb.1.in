@@ -267,6 +267,7 @@ GIven the file \fCindex.slw\fR in the current directory:
 .EX
 .in +4
 .sp
+---
 site-name: Test website
 site-desc: My first website in slweb
 ---
