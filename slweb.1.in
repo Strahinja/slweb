@@ -230,7 +230,9 @@ containing the \[lq]watermark\[rq] text and a link to the
 home page.
 .
 .PP
-.B Special YAML variables
+.B Special 
+.SM \fBYAML
+.B variables
 supported by slweb are:
 .
 .IP \[bu] 4
