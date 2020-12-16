@@ -23,7 +23,7 @@
 
 static size_t lineno = 0;
 static size_t colno = 1;
-static char* filename = NULL;
+static uint8_t* filename = NULL;
 
 int
 version()
@@ -144,15 +144,16 @@ process_heading(uint8_t* token, FILE* output, UBYTE heading_level)
 int
 process_tag(uint8_t* token, FILE* output, BOOL end_tag)
 {
-    if (!token || u8_strlen(token) < 1)
+    if (!token || u8_strlen(token) < 1 || !filename)
         return warning(1, (uint8_t*)"No tag\n");
 
-    uint8_t* basename = (uint8_t*) calloc(strlen(filename), sizeof(uint8_t));
-    uint8_t* slash = u8_strrchr((uint8_t*)filename, '/');
+    uint8_t* basename = (uint8_t*) calloc(u8_strlen(filename), 
+            sizeof(uint8_t));
+    uint8_t* slash = u8_strrchr(filename, '/');
     if (slash)
         u8_strncpy(basename, slash+1, u8_strlen(slash+1));
     else
-        u8_strncpy(basename, filename, u8_strlen((uint8_t*)filename));
+        u8_strncpy(basename, filename, u8_strlen(filename));
 
     if (!strcmp((char*)token, "git-log"))
     {
@@ -1191,23 +1192,63 @@ main(int argc, char** argv)
 
     FILE* input = NULL;
     FILE* output = stdout;
+    uint8_t* buffer = NULL;
+
     if (filename)
     {
+        struct stat fs;
+
         input = fopen(filename, "r");
         if (!input)
             return error(ENOENT, (uint8_t*)"No such file: %s\n", filename);
+
+        fstat(fileno(input), &fs);
+        buffer = (uint8_t*) calloc(fs.st_size, sizeof(uint8_t));
+        if (!buffer)
+            return error(ENOMEM, 
+                    (uint8_t*)"Memory allocation failed (out of memory?)\n");
+
+        fread((void*)buffer, sizeof(char), fs.st_size, input);
     }
     else
+    {
+        uint8_t* bufline = NULL;
+        size_t buffer_len = 0;
+        size_t bufline_len = 0;
+
         input = stdin;
 
-    struct stat fs;
-    fstat(fileno(input), &fs);
-    uint8_t* buffer = (uint8_t*) calloc(fs.st_size, sizeof(uint8_t));
-    if (!buffer)
-        return error(ENOMEM, 
-                (uint8_t*)"Memory allocation failed (out of memory?)\n");
+        bufline = (uint8_t*) calloc(BUFSIZE, sizeof(uint8_t));
+        if (!bufline)
+            return error(ENOMEM, 
+                    (uint8_t*)"Memory allocation failed (out of memory?)\n");
+        buffer = (uint8_t*) calloc(BUFSIZE, sizeof(uint8_t));
+        if (!buffer)
+            return error(ENOMEM, 
+                    (uint8_t*)"Memory allocation failed (out of memory?)\n");
 
-    fread((void*)buffer, sizeof(char), fs.st_size, input);
+        while (!feof(input))
+        {
+            uint8_t* eol = NULL;
+            if (!fgets((char*)bufline, BUFSIZE-1, input))
+                break;
+            eol = u8_strchr(bufline, (ucs4_t)'\n');
+            if (eol)
+                *(eol+1) = '\0';
+            fprintf(stderr, "bufline = [%s]\n", bufline);
+            bufline_len = u8_strlen(bufline);
+            if (buffer_len + bufline_len + 1 > BUFSIZE)
+            {
+                buffer = (uint8_t*) realloc(buffer, 
+                        buffer_len + bufline_len + 1);
+            }
+            u8_strncat(buffer, bufline, bufline_len);
+            buffer_len += bufline_len;
+        }
+        free(bufline);
+    }
+
+    /*fprintf(stderr, "buffer = [%s]\n", buffer);*/
 
     KeyValue* vars = NULL;
     size_t vars_count = 0;
