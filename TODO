@@ -6,13 +6,13 @@ Migration to C checklist
 
     [ ] Add {=macro} parsing
     [ ] Add [=command Link](link) form of links
-    [ ] Add [(Link)](link) form of links
+    [x] Add [(Link)](link) form of links
     [ ] Add {include} processing
     [x] Add {.class} processing
     [x] Add {#id} processing
     [x] Convert strncat token processing to individual token-based
     [ ] Add {lsdir}
-    [ ] Add title: processing
+    [x] Add title: processing
     [ ] Update manpage
     [x] Add backslash-escaping of blank lines for normal tags
 

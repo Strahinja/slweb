@@ -22,9 +22,10 @@
 
 #include <errno.h>
 #include <stdarg.h>
-#include <stdlib.h>
-#include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <unistr.h>
 #include <unistdio.h>
@@ -76,8 +77,9 @@ const USHORT ST_CODE             = 1 << 8;
 const USHORT ST_BLOCKQUOTE       = 1 << 9;
 const USHORT ST_LINK             = 1 << 10;
 const USHORT ST_LINK_SECOND_ARG  = 1 << 11;
-const USHORT ST_IMAGE            = 1 << 12;
-const USHORT ST_IMAGE_SECOND_ARG = 1 << 13;
+const USHORT ST_LINK_SPAN        = 1 << 12;
+const USHORT ST_IMAGE            = 1 << 13;
+const USHORT ST_IMAGE_SECOND_ARG = 1 << 14;
 #pragma GCC diagnostic pop
 
 #endif /* __DEFS_H */
