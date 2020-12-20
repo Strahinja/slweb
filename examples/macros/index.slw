@@ -1,0 +1,20 @@
+{=copyright}Copyright &copy; John Doe. <br />
+All rights reserved.{/=copyright}
+
+{header}{=copyright}{/header}
+
+{main}
+# Title
+
+Some text. The next `&lt;pre>` will use a macro:
+
+{pre}
+{=copyright}
+{/pre}
+
+Some more text.
+
+{/main}
+
+{footer}{=copyright}{/footer}
+

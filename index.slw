@@ -20,6 +20,11 @@ cloning the repository, required to use the directive `&lbrace;git-log&rbrace;`.
 ```
 $ git clone https://github.com/Strahinja/slweb.git
 $ cd slweb
+$ make && <a href="https://github.com/slicer69/doas">doas</a> make install
+```
+or with **sudo**(1):
+
+```
 $ make && sudo make install
 ```
 

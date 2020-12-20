@@ -4,7 +4,7 @@
 Migration to C checklist
 ------------------------
 
-    [ ] Add {=macro} parsing
+    [x] Add {=macro} parsing
     [ ] Add [=command Link](link) form of links
     [x] Add [(Link)](link) form of links
     [ ] Add {include} processing

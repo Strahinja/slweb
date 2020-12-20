@@ -5,8 +5,8 @@ MANDIR = /usr/local/share/man/man1
 CFLAGS=-g
 LIBS=-lunistring
 BROWSER = surf
-EXAMPLE_PAGES = $(addsuffix /index.slw,examples/basic examples/blockquote \
-	examples/includes examples/links examples/tags)
+EXAMPLE_PAGES = $(addsuffix /index.slw,$(addprefix examples/,\
+		basic blockquote includes links macros tags))
 #EXAMPLE_PAGES += $(addprefix examples/includes,
 EXAMPLE_PAGES_HTML = $(EXAMPLE_PAGES:.slw=.html)
 

@@ -6,8 +6,8 @@ Slweb is a static website generator which aims at being simplistic. It
 transforms custom Markdown-like syntax into HTML.
 
 
-				 Prerequisites
-				 -------------
+                                 Prerequisites
+                                 -------------
 
 Aside from the obvious (GCC and GNU make), slweb requires groff(1) and gzip(1)
 to create and compress documentation. git(1) is, aside from cloning the
@@ -19,6 +19,10 @@ repository, required to use the directive {git-log}.
 
 $ git clone https://github.com/Strahinja/slweb.git
 $ cd slweb
+$ make && doas make install
+
+or with sudo(1):
+
 $ make && sudo make install
 
 

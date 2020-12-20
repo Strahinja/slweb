@@ -58,6 +58,7 @@ typedef struct
 {
     uint8_t* key;
     uint8_t* value;
+    BOOL seen;    /* for use with macros */
 } KeyValue;
 
 #pragma GCC diagnostic push
@@ -80,6 +81,7 @@ const USHORT ST_LINK_SECOND_ARG  = 1 << 11;
 const USHORT ST_LINK_SPAN        = 1 << 12;
 const USHORT ST_IMAGE            = 1 << 13;
 const USHORT ST_IMAGE_SECOND_ARG = 1 << 14;
+const USHORT ST_MACRO_BODY       = 1 << 15;
 #pragma GCC diagnostic pop
 
 #endif /* __DEFS_H */
