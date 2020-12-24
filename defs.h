@@ -43,7 +43,7 @@ typedef enum
 } BOOL;
 
 typedef unsigned char UBYTE;
-typedef unsigned short USHORT;
+typedef unsigned long ULONG;
 
 typedef enum
 {
@@ -65,23 +65,24 @@ typedef struct
 #pragma GCC diagnostic ignored "-Wunused-const-variable"
 const UBYTE MAX_HEADING_LEVEL = 4;
 
-const USHORT ST_NONE             = 0;
-const USHORT ST_YAML             = 1;
-const USHORT ST_YAML_VAL         = 1 << 1;
-const USHORT ST_PARA_OPEN        = 1 << 2;
-const USHORT ST_TAG              = 1 << 3;
-const USHORT ST_HEADING          = 1 << 4;
-const USHORT ST_BOLD             = 1 << 5;
-const USHORT ST_ITALIC           = 1 << 6;
-const USHORT ST_PRE              = 1 << 7;
-const USHORT ST_CODE             = 1 << 8;
-const USHORT ST_BLOCKQUOTE       = 1 << 9;
-const USHORT ST_LINK             = 1 << 10;
-const USHORT ST_LINK_SECOND_ARG  = 1 << 11;
-const USHORT ST_LINK_SPAN        = 1 << 12;
-const USHORT ST_IMAGE            = 1 << 13;
-const USHORT ST_IMAGE_SECOND_ARG = 1 << 14;
-const USHORT ST_MACRO_BODY       = 1 << 15;
+const ULONG ST_NONE             = 0;
+const ULONG ST_YAML             = 1;
+const ULONG ST_YAML_VAL         = 1 << 1;
+const ULONG ST_PARA_OPEN        = 1 << 2;
+const ULONG ST_TAG              = 1 << 3;
+const ULONG ST_HEADING          = 1 << 4;
+const ULONG ST_BOLD             = 1 << 5;
+const ULONG ST_ITALIC           = 1 << 6;
+const ULONG ST_PRE              = 1 << 7;
+const ULONG ST_CODE             = 1 << 8;
+const ULONG ST_BLOCKQUOTE       = 1 << 9;
+const ULONG ST_LINK             = 1 << 10;
+const ULONG ST_LINK_SECOND_ARG  = 1 << 11;
+const ULONG ST_LINK_SPAN        = 1 << 12;
+const ULONG ST_LINK_MACRO       = 1 << 13;
+const ULONG ST_IMAGE            = 1 << 14;
+const ULONG ST_IMAGE_SECOND_ARG = 1 << 15;
+const ULONG ST_MACRO_BODY       = 1 << 16;
 #pragma GCC diagnostic pop
 
 #endif /* __DEFS_H */

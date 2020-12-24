@@ -263,7 +263,7 @@ level heading (\fCtitle: Some title\fR  becomes  \fC## Some title\fR).
 .SH EXAMPLES
 .
 .PP
-GIven the file \fCindex.slw\fR in the current directory:
+Given the file \fCindex.slw\fR in the current directory:
 .EX
 .in +4
 .sp
