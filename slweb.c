@@ -987,7 +987,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 break;
 
             case '/':
-                if (state & (ST_PRE | ST_HEADING))
+                if (state & (ST_PRE | ST_CODE | ST_HEADING))
                 {
                     *ptoken++ = *pline++;
                     colno++;
@@ -1009,7 +1009,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 break;
 
             case '}':
-                if (state & (ST_PRE | ST_HEADING))
+                if (state & (ST_PRE | ST_CODE | ST_HEADING))
                 {
                     *ptoken++ = *pline++;
                     colno++;

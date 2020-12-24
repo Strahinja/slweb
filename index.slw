@@ -13,7 +13,7 @@ stylesheet: index.css
 
 Aside from the obvious (**GCC** and **GNU make**), slweb requires **groff**(1)
 and **gzip**(1) to create and compress documentation. **git**(1) is, aside from
-cloning the repository, required to use the directive `&lbrace;git-log&rbrace;`.
+cloning the repository, required to use the directive `{git-log}`.
 
 ## Install
 
