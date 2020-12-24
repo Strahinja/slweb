@@ -6,8 +6,8 @@ stylesheet: index.css
 {main}
 # slweb
 
-**Slweb** is a static website generator which aims at being simplistic. It uses
-**sed**(1) to transform a custom Markdown-like syntax into HTML.
+**Slweb** is a static website generator which aims at being simplistic. It
+transforms custom Markdown-like syntax into HTML.
 
 ## Prerequisites
 
