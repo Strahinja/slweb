@@ -23,6 +23,17 @@ static size_t lineno = 0;
 static size_t colno = 1;
 static uint8_t* filename = NULL;
 
+#define CHECKEXITNOMEM(ptr) if (!ptr) exit(error(ENOMEM, \
+                (uint8_t*)"Memory allocation failed (out of memory?)\n"))
+
+#define CALLOC(ptr, ptrtype, nmemb) { \
+    ptr = (ptrtype*) calloc(nmemb, sizeof(ptrtype)); \
+    CHECKEXITNOMEM(ptr); }
+
+#define REALLOC(ptr, ptrtype, newsize) { \
+    ptr = (ptrtype*) realloc(ptr, newsize); \
+    CHECKEXITNOMEM(ptr); }
+
 int
 version()
 {
@@ -71,9 +82,8 @@ substr(char* src, int start, int finish)
     int substr_len = finish-start;
     if (substr_len < 0)
         substr_len = 0;
-    char* result = (char*) calloc(substr_len+1, sizeof(char));
-    if (!result)
-        exit(error(ENOMEM, (uint8_t*)"Memory allocation failed (out of memory?)\n"));
+    char* result = NULL;
+    CALLOC(result, char, substr_len+1)
     char* presult = result;
 
     for (int i = start; i < finish && *(src+i) != '\0'; i++)
@@ -110,26 +120,10 @@ set_basedir(char* arg, char** basedir)
         free(*basedir);
 
     if (strlen(arg) < 1)
-        return error(1, (uint8_t*)"--basedir: Argument required\n");
+        exit(error(1, (uint8_t*)"--basedir: Argument required\n"));
 
-    *basedir = (char*) calloc(strlen(arg)+1, sizeof(char));
-
-    if (!*basedir) 
-        return error(ENOMEM, (uint8_t*)"Memory allocation failed (out of memory?)\n");
-
+    CALLOC(*basedir, char, strlen(arg)+1)
     strcpy(*basedir, arg);
-
-    return 0;
-}
-
-int
-finish_and_print_token(uint8_t** token, uint8_t** ptoken, FILE* output)
-{
-    if (!token || !*token || !ptoken || !*ptoken)
-        return 1;
-
-    **ptoken = '\0';
-    fprintf(output, "%s", *token);
 
     return 0;
 }
@@ -153,7 +147,7 @@ process_tag(uint8_t* token, FILE* output, KeyValue** macros,
         BOOL end_tag)
 {
     if (!token || u8_strlen(token) < 1)
-        return warning(1, (uint8_t*)"No tag\n");
+        return warning(1, (uint8_t*)"Empty tag name\n");
 
     if (!strcmp((char*)token, "git-log")
             && !read_yaml_macros_and_links)
@@ -161,8 +155,8 @@ process_tag(uint8_t* token, FILE* output, KeyValue** macros,
         if (!filename)
             return warning(1, (uint8_t*)"Cannot use git-log in stdin\n");
 
-        uint8_t* basename = (uint8_t*) calloc(u8_strlen(filename), 
-                sizeof(uint8_t));
+        uint8_t* basename = NULL;
+        CALLOC(basename, uint8_t, u8_strlen(filename))
         uint8_t* slash = u8_strrchr(filename, '/');
         if (slash)
             u8_strncpy(basename, slash+1, u8_strlen(slash+1));
@@ -170,7 +164,8 @@ process_tag(uint8_t* token, FILE* output, KeyValue** macros,
             u8_strncpy(basename, filename, u8_strlen(filename));
 
         fprintf(output, "<div id=\"git-log\">\nPrevious commit:\n");
-        uint8_t* command = (uint8_t*) calloc(BUFSIZE, sizeof(uint8_t));
+        uint8_t* command = NULL;
+        CALLOC(command, uint8_t, BUFSIZE)
         u8_snprintf(command, BUFSIZE,
                 "git log -1 --pretty=format:\"%s %%h %%ci (%%cn) %%d\""
                 " || echo \"(Not in a Git repository)\"",
@@ -178,10 +173,12 @@ process_tag(uint8_t* token, FILE* output, KeyValue** macros,
         FILE* cmd_output = popen((char*)command, "r");
         if (!cmd_output)
         {
+            fprintf(output, "</div><!--git-log-->\n");
             perror(PROGRAMNAME);
-            return error(1, (uint8_t*)"Cannot popen\n");
+            return warning(1, (uint8_t*)"Cannot popen\n");
         }
-        uint8_t* cmd_output_line = (uint8_t*) calloc(BUFSIZE, sizeof(uint8_t));
+        uint8_t* cmd_output_line = NULL;
+        CALLOC(cmd_output_line, uint8_t, BUFSIZE)
         while (!feof(cmd_output))
         {
             if (!fgets((char*)cmd_output_line, BUFSIZE, cmd_output))
@@ -239,12 +236,11 @@ process_tag(uint8_t* token, FILE* output, KeyValue** macros,
 
                     if (*macros_count > 1)
                     {
-                        *macros = (KeyValue*) realloc(*macros,
-                                *macros_count * sizeof(KeyValue));
+                        REALLOC(*macros, KeyValue, 
+                                *macros_count * sizeof(KeyValue))
                         *pmacros = *macros + *macros_count - 1;
                     }
-                    (*pmacros)->key = (uint8_t*) calloc(u8_strlen(token+1),
-                        sizeof(uint8_t));
+                    CALLOC((*pmacros)->key, uint8_t, u8_strlen(token+1))
                     (*pmacros)->seen = FALSE;
                     u8_strcpy((*pmacros)->key, token+1);
                     (*pmacros)->value = NULL;
@@ -282,7 +278,6 @@ process_tag(uint8_t* token, FILE* output, KeyValue** macros,
                 while (*token && *token != '.')
                     fprintf(output, "%c", *token++);
                 fprintf(output, "\"");
-
                 if (*token == '.')
                 {
                     token++;
@@ -300,7 +295,6 @@ process_tag(uint8_t* token, FILE* output, KeyValue** macros,
                     fprintf(output, "%c", *token++);
                 fprintf(output, "\"");
                 if (*token == '#')
-
                 {
                     token++;
                     fprintf(output, " id=\"");
@@ -508,20 +502,13 @@ slweb_parse(uint8_t* buffer, FILE* output,
     BOOL processed_start_of_line = FALSE;
 
     if (!buffer)
-        return error(1, (uint8_t*)"Empty buffer\n");
+        exit(error(1, (uint8_t*)"Empty buffer\n"));
 
     if (!vars || !*vars)
-        return error(EINVAL, (uint8_t*)"Invalid argument (vars)\n");
+        exit(error(EINVAL, (uint8_t*)"Invalid argument (vars)\n"));
 
-    line = (uint8_t*) calloc(BUFSIZE, sizeof(uint8_t));
-    if (!line)
-        return error(ENOMEM, 
-                (uint8_t*)"Memory allocation failed (out of memory?)\n");
-
-    token = (uint8_t*) calloc(BUFSIZE, sizeof(uint8_t));
-    if (!token)
-        return error(ENOMEM, 
-                (uint8_t*)"Memory allocation failed (out of memory?)\n");
+    CALLOC(line, uint8_t, BUFSIZE)
+    CALLOC(token, uint8_t, BUFSIZE)
 
     pbuffer = buffer;
     pvars = *vars;
@@ -593,12 +580,11 @@ slweb_parse(uint8_t* buffer, FILE* output,
 
                     if (*vars_count > 1)
                     {
-                        *vars = (KeyValue*) realloc(*vars, 
-                                *vars_count * sizeof(KeyValue));
+                        REALLOC(*vars, KeyValue,
+                                *vars_count * sizeof(KeyValue))
                         pvars = *vars + *vars_count - 1;
                     }
-                    pvars->key = (uint8_t*) calloc(u8_strlen(token)+1,
-                            sizeof(uint8_t));
+                    CALLOC(pvars->key, uint8_t, u8_strlen(token)+1)
                     u8_strcpy(pvars->key, token);
                     pvars->value = NULL;
 
@@ -943,7 +929,8 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 break;
 
             case '{':
-                if (state & (ST_PRE | ST_YAML | ST_YAML_VAL | ST_HEADING))
+                if (state & (ST_PRE | ST_CODE | ST_YAML | ST_YAML_VAL 
+                            | ST_HEADING))
                 {
                     *ptoken++ = *pline++;
                     colno++;
@@ -964,16 +951,15 @@ slweb_parse(uint8_t* buffer, FILE* output,
 
                             if (sizeof(pmacros->value) < value_len + token_len + 1)
                             {
-                                pmacros->value = (uint8_t*) realloc(pmacros->value,
+                                REALLOC(pmacros->value, uint8_t,
                                         sizeof(pmacros->value) 
-                                        + BUFSIZE * sizeof(uint8_t));
+                                        + BUFSIZE * sizeof(uint8_t))
                             }
                             u8_strncat(pmacros->value, token, token_len);
                         }
                         else
                         {
-                            pmacros->value = (uint8_t*) calloc(BUFSIZE, 
-                                    sizeof(uint8_t));
+                            CALLOC(pmacros->value, uint8_t, BUFSIZE)
                             u8_strcpy(pmacros->value, token);
                         }
                     }
@@ -1132,7 +1118,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 break;
 
             case '(':
-                if (state & ST_MACRO_BODY)
+                if (state & (ST_MACRO_BODY | ST_PRE | ST_CODE))
                 {
                     *ptoken++ = *pline++;
                     colno++;
@@ -1165,7 +1151,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 break;
 
             case ')':
-                if (state & ST_MACRO_BODY)
+                if (state & (ST_MACRO_BODY | ST_PRE | ST_CODE))
                 {
                     *ptoken++ = *pline++;
                     colno++;
@@ -1221,7 +1207,8 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 break;
 
             case ']':
-                if (!(state & (ST_MACRO_BODY | ST_LINK | ST_IMAGE)))
+                if (!(state & (ST_MACRO_BODY | ST_LINK | ST_IMAGE | ST_PRE
+                                | ST_CODE)))
                 {
                     *ptoken++ = *pline++;
                     colno++;
@@ -1260,12 +1247,11 @@ slweb_parse(uint8_t* buffer, FILE* output,
 
                             if (*links_count > 1)
                             {
-                                *links = (KeyValue*) realloc(*links,
-                                        *links_count * sizeof(KeyValue));
+                                REALLOC(*links, KeyValue,
+                                        *links_count * sizeof(KeyValue))
                                 plinks = *links + *links_count - 1;
                             }
-                            plinks->key = (uint8_t*) calloc(u8_strlen(token),
-                                    sizeof(uint8_t));
+                            CALLOC(plinks->key, uint8_t, u8_strlen(token)+1)
                             u8_strcpy(plinks->key, token);
                             plinks->value = NULL;
                             pline += 2;
@@ -1286,15 +1272,11 @@ slweb_parse(uint8_t* buffer, FILE* output,
                             {
                                 size_t token_len = u8_strlen(token);
                                 if (token_len > u8_strlen(link_text))
-                                    link_text = (uint8_t*) realloc(link_text,
-                                            token_len * sizeof(uint8_t));
+                                    REALLOC(link_text, uint8_t, 
+                                            token_len * sizeof(uint8_t))
                             }
                             else
-                                link_text = (uint8_t*) calloc(u8_strlen(token),
-                                        sizeof(uint8_t));
-                            if (!link_text)
-                                return error(ENOMEM, 
-                                        (uint8_t*)"Memory allocation failed (out of memory?)\n");
+                                CALLOC(link_text, uint8_t, u8_strlen(token)+1)
                             u8_strcpy(link_text, token);
                             pline += 2;
                             colno += 2;
@@ -1322,15 +1304,6 @@ slweb_parse(uint8_t* buffer, FILE* output,
                     break;
                 }
 
-                /*
-                 *if (state & (ST_PRE | ST_CODE | ST_LINK_SECOND_ARG))
-                 *{
-                 *    *ptoken++ = *pline++;
-                 *    colno++;
-                 *    break;
-                 *}
-                 */
-
                 /* TODO: Cases? */
                 pline++;
                 colno++;
@@ -1346,8 +1319,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 && (state & ST_YAML_VAL))
         {
             *ptoken = '\0';
-            pvars->value = (uint8_t*) calloc(u8_strlen(token)+1, 
-                    sizeof(uint8_t));
+            CALLOC(pvars->value, uint8_t, u8_strlen(token)+1)
             u8_strcpy(pvars->value, token);
         }
         else 
@@ -1368,17 +1340,16 @@ slweb_parse(uint8_t* buffer, FILE* output,
 
                             if (sizeof(pmacros->value) < value_len + token_len + 1)
                             {
-                                pmacros->value = (uint8_t*) realloc(pmacros->value,
+                                REALLOC(pmacros->value, uint8_t,
                                         sizeof(pmacros->value) 
-                                        + BUFSIZE * sizeof(uint8_t));
+                                        + BUFSIZE * sizeof(uint8_t))
                             }
                             u8_strncat(pmacros->value, token, token_len);
                             u8_strncat(pmacros->value, (uint8_t*)"\n", 1);
                         }
                         else
                         {
-                            pmacros->value = (uint8_t*) calloc(BUFSIZE, 
-                                    sizeof(uint8_t));
+                            CALLOC(pmacros->value, uint8_t, BUFSIZE)
                             u8_strcpy(pmacros->value, token);
                             u8_strncat(pmacros->value, (uint8_t*)"\n", 1);
                         }
@@ -1389,8 +1360,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                     *ptoken = '\0';
                     if (read_yaml_macros_and_links)
                     {
-                        plinks->value = (uint8_t*) calloc(u8_strlen(token),
-                                sizeof(uint8_t));
+                        CALLOC(plinks->value, uint8_t, u8_strlen(token)+1)
                         u8_strcpy(plinks->value, token);
                     }
                 }
@@ -1481,9 +1451,7 @@ main(int argc, char** argv)
     BOOL body_only = FALSE;
     char* basedir = NULL;
 
-    basedir = (char*) calloc(2, sizeof(char));
-    if (!basedir)
-        return error(ENOMEM, (uint8_t*)"Memory allocation failed (out of memory?)\n");
+    CALLOC(basedir, char, 2)
     *basedir = '.';
 
     while ((arg = *++argv))
@@ -1576,11 +1544,7 @@ main(int argc, char** argv)
             return error(ENOENT, (uint8_t*)"No such file: %s\n", filename);
 
         fstat(fileno(input), &fs);
-        buffer = (uint8_t*) calloc(fs.st_size, sizeof(uint8_t));
-        if (!buffer)
-            return error(ENOMEM, 
-                    (uint8_t*)"Memory allocation failed (out of memory?)\n");
-
+        CALLOC(buffer, uint8_t, fs.st_size)
         fread((void*)buffer, sizeof(char), fs.st_size, input);
     }
     else
@@ -1591,14 +1555,8 @@ main(int argc, char** argv)
 
         input = stdin;
 
-        bufline = (uint8_t*) calloc(BUFSIZE, sizeof(uint8_t));
-        if (!bufline)
-            return error(ENOMEM, 
-                    (uint8_t*)"Memory allocation failed (out of memory?)\n");
-        buffer = (uint8_t*) calloc(BUFSIZE, sizeof(uint8_t));
-        if (!buffer)
-            return error(ENOMEM, 
-                    (uint8_t*)"Memory allocation failed (out of memory?)\n");
+        CALLOC(bufline, uint8_t, BUFSIZE)
+        CALLOC(buffer, uint8_t, BUFSIZE)
 
         while (!feof(input))
         {
@@ -1609,11 +1567,8 @@ main(int argc, char** argv)
             if (eol)
                 *(eol+1) = '\0';
             bufline_len = u8_strlen(bufline);
-            if (buffer_len + bufline_len + 1 > BUFSIZE)
-            {
-                buffer = (uint8_t*) realloc(buffer, 
-                        buffer_len + bufline_len + 1);
-            }
+            if (buffer_len + bufline_len + 1 > sizeof(buffer))
+                REALLOC(buffer, uint8_t, sizeof(buffer) + BUFSIZE)
             u8_strncat(buffer, bufline, bufline_len);
             buffer_len += bufline_len;
         }
@@ -1627,24 +1582,15 @@ main(int argc, char** argv)
     KeyValue* links = NULL;
     size_t links_count = 0;
 
-    vars = (KeyValue*) calloc(1, sizeof(KeyValue));
-    if (!vars)
-        return error(ENOMEM, 
-                (uint8_t*)"Memory allocation failed (out of memory?)\n");
+    CALLOC(vars, KeyValue, 1)
     vars->key = NULL;
     vars->value = NULL;
 
-    macros = (KeyValue*) calloc(1, sizeof(KeyValue));
-    if (!macros)
-        return error(ENOMEM, 
-                (uint8_t*)"Memory allocation failed (out of memory?)\n");
+    CALLOC(macros, KeyValue, 1)
     macros->key = NULL;
     macros->value = NULL;
 
-    links = (KeyValue*) calloc(1, sizeof(KeyValue));
-    if (!links)
-        return error(ENOMEM, 
-                (uint8_t*)"Memory allocation failed (out of memory?)\n");
+    CALLOC(links, KeyValue, 1)
     links->key = NULL;
     links->value = NULL;
 
@@ -1652,17 +1598,6 @@ main(int argc, char** argv)
     slweb_parse(buffer, output, &vars, &vars_count, &macros, &macros_count,
             &links, &links_count,
             body_only, TRUE);
-
-    /*
-     *fprintf(stderr, "MACROS[%lu]:\n", macros_count);
-     *KeyValue* pmacros = macros;
-     *while (pmacros != macros + macros_count)
-     *{
-     *    fprintf(stderr, "macro[=%s]=[%s]\n", pmacros->key, pmacros->value);
-     *    pmacros++;
-     *}
-     *fprintf(stderr, "END MACROS\n");
-     */
 
     /* Second pass: parse and output */
     return slweb_parse(buffer, output, &vars, &vars_count, 
