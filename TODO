@@ -7,10 +7,11 @@ Migration to C checklist
     [x] Add {=macro} parsing
     [x] Add [=command Link](link) form of links
     [x] Add [(Link)](link) form of links
-    [ ] Add {include} processing
+    [x] Add {include} processing
     [x] Add {.class} processing
     [x] Add {#id} processing
     [x] Convert strncat token processing to individual token-based
+    [ ] -d support (determine real pathname in links)
     [ ] Add {lsdir}
     [x] Add title: processing
     [ ] Update manpage
