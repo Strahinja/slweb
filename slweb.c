@@ -212,14 +212,14 @@ process_tag(uint8_t* token, FILE* output, KeyValue** macros,
     else if (!strcmp(substr((char*)token, 0, strlen("include")), "include"))
                                             /* {include} */
     {
-        if (!arg_zero)
-            exit(error(EINVAL, (uint8_t*)"Invalid argument zero\n"));
-
-        if (!filename)
-            return warning(1, (uint8_t*)"Cannot use 'include' in stdin\n");
-
         if (!read_yaml_macros_and_links)
         {
+            if (!arg_zero)
+                exit(error(EINVAL, (uint8_t*)"Invalid argument zero\n"));
+
+            if (!filename)
+                return warning(1, (uint8_t*)"Cannot use 'include' in stdin\n");
+
             uint8_t* command = NULL;
             uint8_t* slash = u8_strrchr(filename, (ucs4_t)'/');
             uint8_t* ptoken = u8_strchr(token, (ucs4_t)' ');
@@ -229,6 +229,7 @@ process_tag(uint8_t* token, FILE* output, KeyValue** macros,
             uint8_t* pinclude_basedir = NULL;
             size_t include_basedir_len = 0;
             uint8_t* pfilename = filename;
+
             if (!ptoken)
             {
                 *skip_eol = TRUE;

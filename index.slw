@@ -104,7 +104,7 @@ WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
 PARTICULAR PURPOSE. See the GNU General Public License for more details. 
 
 You should have received a copy of the GNU General Public License along with
-this program. If not, see &lt;https://www.gnu.org/licenses/&gt;. 
+this program. If not, see &lt;[https://www.gnu.org/licenses/][4]&gt;. 
 
 {git-log}
 
@@ -114,4 +114,5 @@ this program. If not, see &lt;https://www.gnu.org/licenses/&gt;.
 [1]: https://github.com/Strahinja/slweb/tree/master/examples
 [2]: https://github.com/Strahinja/slweb/tree/master/TODO
 [3]: https://github.com/Strahinja/slweb/issues
+[4]: https://www.gnu.org/licenses
 
