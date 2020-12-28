@@ -74,13 +74,14 @@ Text surrounded by newlines will be put inside \fC<p></p>\fR tags.
 .BR Headings .
 A line starting with \fC#\fR followed by space will be put inside
 \fC<h?></h?>\fR, where \fC?\fR stands for 1-4, depending on the number of
-hashtags.
+hash signs.
 .
 .IP \[bu]
 .BR Bold/italic .
 Text inside \fC*asterisks*\fR or \fC_underlines_\fR will be put inside
 \fC<em></em>\fR. Text inside \fC**double asterisks**\fR or \fC__double
-underlines__\fR will be put inside \fC<strong></strong>\fR.
+underlines__\fR will be put inside \fC<strong></strong>\fR. \fC***More than
+two*** of the ___same symbol___\fR should be avoided.
 .
 .IP \[bu]
 .BR Backticks .
@@ -100,7 +101,17 @@ href="https://example.com">A link</a>\fR.
 Special case is the form \fC[=somemacro Link title](https://anything)\fR which
 prepends the body of a macro
 .I somemacro
-into the \fC<a></a>\fR tag. See
+into the \fC<a></a>\fR tag (here broken into multiple lines for clarity):
+.EX
+.in +4
+<a href="https://anything">
+<!-- contents of somemacro -->
+Link title</a>
+.EE
+.in -4
+This can, for example, be used to add
+.SM SVG
+icons to links. See
 .BR Macros .
 
 Also, the form \fC[(Link title)](http://asite.com)\fR will surround the link
@@ -119,7 +130,14 @@ macro-form:
 .in -4
 It will prepend the body of a macro
 .I somemacro
-outside of the \fC<span></span>\fR.
+outside of the \fC<span></span>\fR:
+.EX
+.in +4
+<a href="http://asite.com">
+<!-- contents of somemacro -->
+<span>Link title</span></a>
+.EE
+.in -4
 .
 .IP \[bu]
 .BR "Line breaks" .
@@ -144,7 +162,7 @@ them with a space, just like in
 and you can have both a class attribute and an id attribute per tag.
 
 A variation of this is to use a special form \fC{.myclass}{/.myclass}\fR, which
-will be transformed into \fC<div class="myclass"></div><!--.myclass-->\fR.
+will be transformed into \fC<div class="myclass"></div>\fR.
 .
 .IP \- 4
 .BR "Id attributes" .
@@ -153,7 +171,7 @@ id="myid"></tag>\fR. Only one id attribute is permitted per tag directive, and
 you can have both an id attribute and a class attribute per tag.
 
 A variation of this is to use a special form \fC{#myid}{/#myid}\fR, which will
-be transformed into \fC<div id="myid"></div><!--#myid-->\fR.
+be transformed into \fC<div id="myid"></div>\fR.
 .RE
 .
 .IP \[bu] 4
@@ -163,7 +181,6 @@ Directive \fC{include "somefile"}\fR will run \fCslweb -b\fR on
 (related to the directory containing the file containing the directive) and
 include the resulting
 .SM HTML.
-Directive needs to start at the beginning of the line.
 .
 .IP \[bu] 4
 .BR Macros .
@@ -250,12 +267,13 @@ attribute of the \fC<meta name="description">\fR tag.
 .BR stylesheet .
 The contents of this variable will be treated as a
 .sm CSS
-file name to be included using the \fC<link rel="stylesheet" />\fR tag.
+file name to be included using the \fC<link rel="stylesheet" />\fR tag. You can
+have more than one \fCstylesheet\fR declaration per \fI.slw\fR file.
 .
 .IP \[bu] 4
 .BR title .
 If present, contents of this variable will be prepended to the body as a second
-level heading (\fCtitle: Some title\fR  becomes  \fC## Some title\fR).
+level heading (\fCtitle: Some title\fR  becomes  \fC<h2>Some title</h2>\fR).
 .
 .SH "SEE ALSO"
 .BR sed (1)

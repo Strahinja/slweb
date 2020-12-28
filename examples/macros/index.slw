@@ -1,7 +1,11 @@
+---
+stylesheet: style.css
+---
+
 {=copyright}Copyright &copy; John Doe. <br />
 All rights reserved.{/=copyright}
 
-{header}{=copyright}{/header}
+{header}Header: {=copyright}{/header}
 
 {main}
 # Title
@@ -16,5 +20,5 @@ Some more text.
 
 {/main}
 
-{footer}{=copyright}{/footer}
+{footer}Footer: {=copyright}{/footer}
 

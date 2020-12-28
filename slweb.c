@@ -225,9 +225,9 @@ process_tag(uint8_t* token, FILE* output, KeyValue** macros,
             uint8_t* ptoken = u8_strchr(token, (ucs4_t)' ');
             uint8_t* include_filename = NULL;
             uint8_t* pinclude_filename = NULL;
-            uint8_t* include_basedir = NULL;
-            uint8_t* pinclude_basedir = NULL;
-            size_t include_basedir_len = 0;
+            uint8_t* include_dirname = NULL;
+            uint8_t* pinclude_dirname = NULL;
+            size_t include_dirname_len = 0;
             uint8_t* pfilename = filename;
 
             if (!ptoken)
@@ -238,18 +238,18 @@ process_tag(uint8_t* token, FILE* output, KeyValue** macros,
             }
             ptoken++;
             CALLOC(include_filename, uint8_t, BUFSIZE)
-            CALLOC(include_basedir, uint8_t, BUFSIZE)
-            pinclude_basedir = include_basedir;
+            CALLOC(include_dirname, uint8_t, BUFSIZE)
+            pinclude_dirname = include_dirname;
             if (slash)
                 while (pfilename && *pfilename && pfilename != slash)
-                    *pinclude_basedir++ = *pfilename++;
+                    *pinclude_dirname++ = *pfilename++;
             else
-                *pinclude_basedir++ = '.';
-            *pinclude_basedir = '\0';
-            include_basedir_len = u8_strlen(include_basedir);
-            u8_strncpy(include_filename, include_basedir, include_basedir_len);
-            *(include_filename + include_basedir_len) = '/';
-            pinclude_filename = include_filename + include_basedir_len + 1;
+                *pinclude_dirname++ = '.';
+            *pinclude_dirname = '\0';
+            include_dirname_len = u8_strlen(include_dirname);
+            u8_strncpy(include_filename, include_dirname, include_dirname_len);
+            *(include_filename + include_dirname_len) = '/';
+            pinclude_filename = include_filename + include_dirname_len + 1;
             while (ptoken && *ptoken)
                 if (*ptoken != '"')
                     *pinclude_filename++ = *ptoken++;
@@ -281,7 +281,7 @@ process_tag(uint8_t* token, FILE* output, KeyValue** macros,
             pclose(cmd_output);
 
             free(cmd_output_line);
-            free(include_basedir);
+            free(include_dirname);
             free(include_filename);
             free(command);
         }
