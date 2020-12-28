@@ -1,3 +1,3 @@
-redo-ifchange slweb slweb.1.gz slweb.pdf index.html \
-    examples/{basic,blockquote,includes,links,macros,tags}/index.html
+redo-ifchange slweb 
+redo-ifchange slweb.1.gz slweb.pdf index.html examples/all
 
