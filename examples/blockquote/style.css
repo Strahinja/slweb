@@ -1,0 +1,15 @@
+html,
+body
+{
+    line-height: 1.5em;
+}
+
+blockquote
+{
+    background: #fee;
+    border-left: 1em solid #aaa;
+    padding: 0;
+    margin: 0;
+    padding: .5em;
+}
+

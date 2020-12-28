@@ -1,5 +1,7 @@
 .cache
 .redo
+.do_built
+.do_built.dir
 *~
 *.bak
 *.orig

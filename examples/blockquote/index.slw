@@ -1,3 +1,6 @@
+---
+stylesheet: style.css
+---
 This is a document demonstrating quoting:
 > A quoted text
 > which is multiline.
