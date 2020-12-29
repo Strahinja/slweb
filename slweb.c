@@ -18,10 +18,13 @@
  */
 
 #include "defs.h"
+#include <string.h>
 
 static size_t lineno = 0;
 static size_t colno = 1;
-static uint8_t* filename = NULL;
+static char* input_filename = NULL;
+static char* input_dirname = NULL;
+static char* basedir = NULL;
 static char* arg_zero = NULL;
 
 #define CHECKEXITNOMEM(ptr) if (!ptr) exit(error(ENOMEM, \
@@ -75,7 +78,7 @@ warning(int code, uint8_t* fmt, ...)
 }
 
 char*
-substr(char* src, int start, int finish)
+substr(const char* src, int start, int finish)
 {
     int len = strlen(src);
     if (finish > len)
@@ -92,6 +95,12 @@ substr(char* src, int start, int finish)
     *presult = '\0';
 
     return result;
+}
+
+BOOL
+startswith(const char* s, const char* what)
+{
+    return s && what && !strcmp(substr(s, 0, strlen(what)), what);
 }
 
 uint8_t*
@@ -117,6 +126,7 @@ get_value(KeyValue* list, size_t list_count, uint8_t* key, BOOL* seen)
 int
 set_basedir(char* arg, char** basedir)
 {
+    size_t basedir_len = 0;
     if (*basedir)
         free(*basedir);
 
@@ -125,6 +135,9 @@ set_basedir(char* arg, char** basedir)
 
     CALLOC(*basedir, char, strlen(arg)+1)
     strcpy(*basedir, arg);
+    basedir_len = strlen(*basedir);
+    if (*(*basedir + basedir_len - 1) == '/')
+        *(*basedir + basedir_len - 1) = '\0';
 
     return 0;
 }
@@ -153,16 +166,16 @@ process_tag(uint8_t* token, FILE* output, KeyValue** macros,
     if (!strcmp((char*)token, "git-log")
             && !read_yaml_macros_and_links)   /* {git-log} */
     {
-        if (!filename)
+        if (!input_filename)
             return warning(1, (uint8_t*)"Cannot use 'git-log' in stdin\n");
 
-        uint8_t* basename = NULL;
-        CALLOC(basename, uint8_t, u8_strlen(filename))
-        uint8_t* slash = u8_strrchr(filename, (ucs4_t)'/');
+        char* basename = NULL;
+        CALLOC(basename, char, strlen(input_filename))
+        char* slash = strrchr(input_filename, '/');
         if (slash)
-            u8_strncpy(basename, slash+1, u8_strlen(slash+1));
+            strncpy(basename, slash+1, strlen(slash+1));
         else
-            u8_strncpy(basename, filename, u8_strlen(filename));
+            strncpy(basename, input_filename, strlen(input_filename));
 
         fprintf(output, "<div id=\"git-log\">\nPrevious commit:\n");
         uint8_t* command = NULL;
@@ -217,46 +230,35 @@ process_tag(uint8_t* token, FILE* output, KeyValue** macros,
             if (!arg_zero)
                 exit(error(EINVAL, (uint8_t*)"Invalid argument zero\n"));
 
-            if (!filename)
+            if (!input_filename)
                 return warning(1, (uint8_t*)"Cannot use 'include' in stdin\n");
 
             uint8_t* command = NULL;
-            uint8_t* slash = u8_strrchr(filename, (ucs4_t)'/');
             uint8_t* ptoken = u8_strchr(token, (ucs4_t)' ');
-            uint8_t* include_filename = NULL;
-            uint8_t* pinclude_filename = NULL;
-            uint8_t* include_dirname = NULL;
-            uint8_t* pinclude_dirname = NULL;
-            size_t include_dirname_len = 0;
-            uint8_t* pfilename = filename;
+            char* include_filename = NULL;
+            char* pinclude_filename = NULL;
+            CALLOC(include_filename, char, BUFSIZE)
+            pinclude_filename = include_filename;
+            
+            *skip_eol = TRUE;
 
             if (!ptoken)
-            {
-                *skip_eol = TRUE;
                 return warning(1, (uint8_t*)"Directive 'include' requires"
                         " an argument\n");
-            }
+
             ptoken++;
-            CALLOC(include_filename, uint8_t, BUFSIZE)
-            CALLOC(include_dirname, uint8_t, BUFSIZE)
-            pinclude_dirname = include_dirname;
-            if (slash)
-                while (pfilename && *pfilename && pfilename != slash)
-                    *pinclude_dirname++ = *pfilename++;
-            else
-                *pinclude_dirname++ = '.';
-            *pinclude_dirname = '\0';
-            include_dirname_len = u8_strlen(include_dirname);
-            u8_strncpy(include_filename, include_dirname, include_dirname_len);
-            *(include_filename + include_dirname_len) = '/';
-            pinclude_filename = include_filename + include_dirname_len + 1;
             while (ptoken && *ptoken)
                 if (*ptoken != '"')
                     *pinclude_filename++ = *ptoken++;
                 else 
                     ptoken++;
+
             CALLOC(command, uint8_t, BUFSIZE)
-            u8_snprintf(command, BUFSIZE, "%s -b %s.slw", arg_zero, include_filename);
+            u8_snprintf(command, BUFSIZE, "%s -b -d %s %s/%s.slw", 
+                    arg_zero, 
+                    !strcmp(basedir, ".") ? input_dirname : basedir,
+                    input_dirname,
+                    include_filename);
 
             FILE* cmd_output = popen((char*)command, "r");
             if (!cmd_output)
@@ -281,9 +283,8 @@ process_tag(uint8_t* token, FILE* output, KeyValue** macros,
             pclose(cmd_output);
 
             free(cmd_output_line);
-            free(include_dirname);
-            free(include_filename);
             free(command);
+            free(include_filename);
         }
         *skip_eol = TRUE;
     }
@@ -417,15 +418,83 @@ process_blockquote(FILE* output, BOOL end_tag)
     return 0;
 }
 
+BOOL
+url_is_local(char* url)
+{
+    return !(startswith(url, "http://")
+        || startswith(url, "https://")
+        || startswith(url, "ftp://")
+        || startswith(url, "ftps://")
+        || startswith(url, "mailto://"));
+}
+
+int
+get_realpath(char** realpath, char* relativeto, char* path)
+{
+    uint8_t* command = NULL;
+    FILE* cmd_output = NULL;
+
+    CALLOC(command, uint8_t, BUFSIZE)
+    strcpy(*realpath, ".");
+    u8_snprintf(command, BUFSIZE, "realpath --relative-to=%s %s", 
+            relativeto, path);
+
+    cmd_output = popen((char*)command, "r");
+    if (cmd_output)
+    {
+        uint8_t* cmd_output_line = NULL;
+        CALLOC(cmd_output_line, uint8_t, BUFSIZE)
+        while (!feof(cmd_output))
+        {
+            if (!fgets((char*)cmd_output_line, BUFSIZE, cmd_output))
+                continue;
+
+            char* eol = strchr((char*)cmd_output_line, '\n');
+            if (eol)
+                *eol = '\0';
+
+            strcpy(*realpath, (char*)cmd_output_line);
+        }
+        pclose(cmd_output);
+        free(cmd_output_line);
+    }
+    else
+        warning(1, (uint8_t*)"get_realpath: Cannot popen\n");
+
+    free(command);
+
+    return 0;
+}
+
 int
 process_link(uint8_t* link_text, uint8_t* link_macro_body, uint8_t* link_id, 
         KeyValue* links, size_t links_count, FILE* output)
 {
-    uint8_t* url = get_value(links, links_count, link_id, NULL);
-    fprintf(output, "<a href=\"%s\">%s%s</a>", 
+    char* url = (char*)get_value(links, links_count, link_id, NULL);
+    char* link_dir = NULL;
+    BOOL local = FALSE;
+    BOOL dir_is_dot = FALSE;
+
+    if (url)
+        local = url_is_local(url);
+   
+    if (local)
+    {
+        CALLOC(link_dir, char, BUFSIZE)
+        get_realpath(&link_dir, basedir, input_dirname ? input_dirname : ".");
+        dir_is_dot = !strcmp(link_dir, ".");
+    }
+
+    fprintf(output, "<a href=\"%s%s%s\">%s%s</a>", 
+            url && local && !dir_is_dot ? link_dir : "",
+            url && local && !dir_is_dot && url ? "/" : "",
             url ? (char*)url : "", 
             link_macro_body ? (char*)link_macro_body : "",
             link_text);
+
+    if (local)
+        free(link_dir);
+
     return 0;
 }
 
@@ -433,9 +502,30 @@ int
 process_inline_link(uint8_t* link_text, uint8_t* link_macro_body, 
         uint8_t* link_url, FILE* output)
 {
-    fprintf(output, "<a href=\"%s\">%s%s</a>", 
-            link_url, link_macro_body ? (char*)link_macro_body : "",
+    char* link_dir = NULL;
+    BOOL local = FALSE;
+    BOOL dir_is_dot = FALSE;
+
+    if (link_url)
+        local = url_is_local((char*)link_url);
+
+    if (local)
+    {
+        CALLOC(link_dir, char, BUFSIZE)
+        get_realpath(&link_dir, basedir, input_dirname ? input_dirname : ".");
+        dir_is_dot = !strcmp(link_dir, ".");
+    }
+
+    fprintf(output, "<a href=\"%s%s%s\">%s%s</a>", 
+            link_url && local && !dir_is_dot ? link_dir : "",
+            link_url && local && !dir_is_dot && link_url ? "/" : "",
+            link_url ? (char*)link_url : "", 
+            link_macro_body ? (char*)link_macro_body : "",
             link_text);
+
+    if (local)
+        free(link_dir);
+
     return 0;
 }
 
@@ -504,7 +594,6 @@ process_text_token(ULONG* state,
 int
 begin_html_and_head(FILE* output, KeyValue* vars, size_t vars_count)
 {
-    KeyValue* pvars = vars;
     uint8_t* site_name = get_value(vars, vars_count, (uint8_t*)"site-name", NULL);
     uint8_t* site_desc = get_value(vars, vars_count, (uint8_t*)"site-desc", NULL);
 
@@ -612,7 +701,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
     {
         uint8_t* eol = u8_strchr(pbuffer, (ucs4_t)'\n');
         if (!eol)
-            continue;
+            break;
 
         pline = line;
         while (pbuffer != eol)
@@ -1542,7 +1631,6 @@ main(int argc, char** argv)
     char* arg;
     Command cmd = CMD_NONE;
     BOOL body_only = FALSE;
-    char* basedir = NULL;
 
     CALLOC(basedir, char, 2)
     *basedir = '.';
@@ -1615,7 +1703,7 @@ main(int argc, char** argv)
                     return result;
             }
             else
-                filename = (uint8_t*)arg;
+                input_filename = arg;
             cmd = CMD_NONE;
         }
     }
@@ -1629,18 +1717,38 @@ main(int argc, char** argv)
     FILE* input = NULL;
     FILE* output = stdout;
     uint8_t* buffer = NULL;
+    char* slash = NULL;
 
-    if (filename)
+    if (input_filename)
     {
         struct stat fs;
 
-        input = fopen((char*)filename, "r");
+        input = fopen((char*)input_filename, "r");
         if (!input)
-            return error(ENOENT, (uint8_t*)"No such file: %s\n", filename);
+            return error(ENOENT, (uint8_t*)"No such file: %s\n", input_filename);
 
         fstat(fileno(input), &fs);
         CALLOC(buffer, uint8_t, fs.st_size)
         fread((void*)buffer, sizeof(char), fs.st_size, input);
+
+        slash = strrchr(input_filename, '/');
+        if (slash)
+        {
+            CALLOC(input_dirname, char, BUFSIZE)
+            char* pinput_dirname = input_dirname;
+            char* pinput_filename = input_filename;
+            while (pinput_filename && *pinput_filename
+                    && pinput_filename != slash)
+                *pinput_dirname++ = *pinput_filename++;
+        }
+        else
+        {
+            CALLOC(input_dirname, char, 2)
+            *input_dirname = '.';
+        }
+
+        if (!strcmp(basedir, "."))
+            strcpy(basedir, input_dirname);
     }
     else
     {

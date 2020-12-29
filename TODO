@@ -11,7 +11,7 @@ Migration to C checklist
     [x] Add {.class} processing
     [x] Add {#id} processing
     [x] Convert strncat token processing to individual token-based
-    [ ] -d support (determine real pathname in links)
+    [x] -d support (determine real pathname in links)
     [ ] Add {lsdir}
     [x] Add title: processing
     [ ] Update manpage

@@ -6,7 +6,8 @@ html, body
 
 a
 {
-    line-height: 1em;
+    line-height: 24px;
+    height: 24px;
     padding: .5em 1em;
     border-radius: 10pt;
     background: #00f;
@@ -21,6 +22,33 @@ a:hover
 
 a>svg
 {
-    vertical-align: middle;
+    vertical-align: text-bottom;
+    margin-bottom: -3px;
+    margin-right: .5ex;
+}
+
+a>span
+{
+    display: inline-block;
+    font-family: serif;
+    transform: skewX(15deg);
+    font-style: oblique;
+}
+
+a>span::after
+{
+    content: ' ';
+    display: block;
+    width: 0;
+    height: 2px;
+    background-color: #fff;
+    margin: 0 auto;
+    margin-top: -4px;
+    transition: all .25s ease;
+}
+
+a:hover>span::after
+{
+    width: 100%;
 }
 

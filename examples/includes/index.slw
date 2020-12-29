@@ -3,7 +3,7 @@ site-name: Includes
 site-description: Demonstration of the includes
 stylesheet: index.css
 ---
-{include "header"}
+{include "inc/header"}
 
 {main}
 {include "description"}
@@ -19,5 +19,5 @@ stylesheet: index.css
 {include "bugs"}
 {/main}
 
-{include "footer"}
+{include "inc/footer"}
 

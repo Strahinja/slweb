@@ -3,6 +3,7 @@
 slweb v0.2.2-beta
 {/.left}
 {.center}
+{include "copy"}
 23 Nov 2020
 {/.center}
 {.right}
