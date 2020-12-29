@@ -141,7 +141,7 @@ outside of the \fC<span></span>\fR:
 .
 .IP \[bu]
 .BR "Line breaks" .
-Two spaces followed by a newline will be turned into \fC<br />\fR.
+Two spaces followed by a newline will become \fC<br />\fR.
 .
 .PP
 .BR "Directives " include:
@@ -156,8 +156,9 @@ Directive \fC{sometag}{/sometag}\fR will be transformed into
 .BR "Class attributes" .
 Directive \fC{tag.myclass mysecondclass}{/tag}\fR will be transformed into
 \fC<tag class="myclass mysecondclass"></tag>\fR. Only one class attribute is
-permitted per tag directive, but you can include multiple classes by separating
-them with a space, just like in
+permitted per tag directive (subsequent dots will be inserted as part of the
+\fCclass\fR attribute), but you can include multiple classes by separating them
+with a space, just like in
 .SM HTML,
 and you can have both a class attribute and an id attribute per tag.
 
@@ -167,7 +168,8 @@ will be transformed into \fC<div class="myclass"></div>\fR.
 .IP \- 4
 .BR "Id attributes" .
 Directive \fC{tag#myid}{/tag}\fR will be transformed into \fC<tag
-id="myid"></tag>\fR. Only one id attribute is permitted per tag directive, and
+id="myid"></tag>\fR. Only one id attribute is permitted per tag directive
+(subsequent hash signs will be included as part of the \fCid\fR attribute), and
 you can have both an id attribute and a class attribute per tag.
 
 A variation of this is to use a special form \fC{#myid}{/#myid}\fR, which will
