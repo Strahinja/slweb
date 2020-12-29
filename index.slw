@@ -11,22 +11,34 @@ transforms custom Markdown-like syntax into HTML.
 
 ## Prerequisites
 
-Aside from the obvious (**GCC** and **GNU make**), slweb requires
-**realpath**(1) to determine paths in local links and **groff**(1) and
-**gzip**(1) to create and compress documentation. **git**(1) is, aside from
-cloning the repository, required to use the directive `{git-log}`.
+Aside from the obvious (**GCC**), slweb requires **realpath**(1) to determine
+paths in local links and **groff**(1) and **gzip**(1) to create and compress
+documentation. **git**(1) is, aside from cloning the repository, required to use
+the directive `{git-log}`.
 
 ## Install
 
 ```
 $ git clone https://github.com/Strahinja/slweb.git
 $ cd slweb
-$ make && <a href="https://github.com/slicer69/doas">doas</a> make install
 ```
+
+Then, if you have [apenwarr/redo][5]:
+
+```
+$ doas redo install
+```
+
+if you don't:
+
+```
+$ doas ./do install
+```
+
 or with **sudo**(1):
 
 ```
-$ make && sudo make install
+$ sudo ./do install
 ```
 
 ## Examples
@@ -116,4 +128,5 @@ this program. If not, see &lt;[https://www.gnu.org/licenses/][4]&gt;.
 [2]: https://github.com/Strahinja/slweb/tree/master/TODO
 [3]: https://github.com/Strahinja/slweb/issues
 [4]: https://www.gnu.org/licenses
+[5]: https://github.com/apenwarr/redo
 

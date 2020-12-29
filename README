@@ -9,9 +9,10 @@ transforms custom Markdown-like syntax into HTML.
                                  Prerequisites
                                  -------------
 
-Aside from the obvious (GCC and GNU make), slweb requires groff(1) and gzip(1)
-to create and compress documentation. git(1) is, aside from cloning the
-repository, required to use the directive {git-log}.
+Aside from the obvious (GCC), slweb requires realpath(1) to determine paths in
+local links and groff(1) and gzip(1) to create and compress documentation.
+git(1) is, aside from cloning the repository, required to use the directive
+{git-log}.
 
 
                                     Install
@@ -19,11 +20,18 @@ repository, required to use the directive {git-log}.
 
 $ git clone https://github.com/Strahinja/slweb.git
 $ cd slweb
-$ make && doas make install
 
-or with sudo(1):
+    Then, if you have djb redo:
 
-$ make && sudo make install
+$ doas redo install
+
+    if you don't:
+
+$ doas ./do install
+
+    or with sudo(1) instead of doas(1):
+
+$ sudo ./do install
 
 
                                     Examples
