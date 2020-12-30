@@ -210,7 +210,7 @@ the directive.
 For every subdirectory of the directory containing the input file, up to
 .I num
 (if present) or 5 (if omitted) total subdirectories, a \fC<li>\fR
-tag will be inserted into the \fC<ul class="dir">\fR tag.
+tag will be inserted into the \fCul\fR tag.
 .
 .IP 3. 4
 A \fC<details>\fR tag will be inserted into each \fC<li>\fR tag.

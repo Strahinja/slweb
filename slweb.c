@@ -412,7 +412,9 @@ process_incdir_subdir(const char* subdirname, FILE* output, BOOL details_open,
                     day = strtok(NULL, "T");
                     if (day)
                     {
-                        fprintf(output, "<a href=\"%s/%s.html\">%s.%s.%s</a>",
+                        fprintf(output, "<div class=\"heading-link\">\n"
+                                "<a href=\"%s/%s.html\">%s.%s.%s</a>\n"
+                                "</div>",
                                 abs_subdirname, 
                                 filename_noext ? filename_noext 
                                     : (*pnamelist)->d_name, 

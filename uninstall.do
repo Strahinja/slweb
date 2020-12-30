@@ -1,5 +1,7 @@
 redo-always
-BINDIR=/usr/local/bin
-MANDIR=/usr/local/share/man/man1
-rm -f $BINDIR/slweb $MANDIR/slweb.1.gz
+PREFIX=/usr/local
+BINDIR=$PREFIX/bin
+DOCDIR=$PREFIX/share/doc/slweb
+MANDIR=$PREFIX/share/man/man1
+rm -f $BINDIR/slweb $DOCDIR/slweb.pdf $MANDIR/slweb.1.gz
 
