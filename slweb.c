@@ -184,6 +184,7 @@ print_command(uint8_t* command, FILE* output)
         fprintf(output, "%s\n", cmd_output_line);
 
     }
+    free(cmd_output_line);
     pclose(cmd_output);
 
     return 0;
