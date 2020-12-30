@@ -18,7 +18,6 @@
  */
 
 #include "defs.h"
-#include <string.h>
 
 static size_t lineno = 0;
 static size_t colno = 1;
@@ -27,16 +26,16 @@ static char* input_dirname = NULL;
 static char* basedir = NULL;
 static char* arg_zero = NULL;
 
-#define CHECKEXITNOMEM(ptr) if (!ptr) exit(error(ENOMEM, \
-                (uint8_t*)"Memory allocation failed (out of memory?)\n"))
+#define CHECKEXITNOMEM(ptr) { if (!ptr) exit(error(ENOMEM, \
+                (uint8_t*)"Memory allocation failed (out of memory?)\n")); }
 
 #define CALLOC(ptr, ptrtype, nmemb) { \
-    ptr = (ptrtype*) calloc(nmemb, sizeof(ptrtype)); \
-    CHECKEXITNOMEM(ptr); }
+    ptr = calloc(nmemb, sizeof(ptrtype)); \
+    CHECKEXITNOMEM(ptr) }
 
 #define REALLOC(ptr, ptrtype, newsize) { \
-    ptr = (ptrtype*) realloc(ptr, newsize); \
-    CHECKEXITNOMEM(ptr); }
+    ptr = realloc(ptr, newsize); \
+    CHECKEXITNOMEM(ptr) }
 
 int
 version()
@@ -142,6 +141,54 @@ set_basedir(char* arg, char** basedir)
     return 0;
 }
 
+char*
+strip_ext(const char* fn)
+{
+    char* newname = NULL;
+    char* pnewname = NULL;
+    const char* pfn = NULL;
+    char* dot = NULL;
+    dot = strrchr(fn, '.');
+    if (!dot)
+        return NULL;
+    CALLOC(newname, char, strlen(fn))
+    pnewname = newname;
+    pfn = fn;
+    while (pfn != dot && *pfn)
+        *pnewname++ = *pfn++;
+    return newname;
+}
+
+int
+print_command(uint8_t* command, FILE* output)
+{
+    FILE* cmd_output = popen((char*)command, "r");
+
+    if (!cmd_output)
+    {
+        perror("popen");
+        return 1;
+    }
+
+    uint8_t* cmd_output_line = NULL;
+    CALLOC(cmd_output_line, uint8_t, BUFSIZE)
+    while (!feof(cmd_output))
+    {
+        if (!fgets((char*)cmd_output_line, BUFSIZE, cmd_output))
+            continue;
+
+        char* eol = strchr((char*)cmd_output_line, '\n');
+        if (eol)
+            *eol = '\0';
+
+        fprintf(output, "%s\n", cmd_output_line);
+
+    }
+    pclose(cmd_output);
+
+    return 0;
+}
+
 int
 process_heading(uint8_t* token, FILE* output, UBYTE heading_level)
 {
@@ -151,6 +198,373 @@ process_heading(uint8_t* token, FILE* output, UBYTE heading_level)
     fprintf(output, "<h%d>%s</h%d>", heading_level, token ? (char*)token : "",
             heading_level);
 
+    return 0;
+}
+
+int
+process_git_log(FILE* output)
+{
+    if (!input_filename)
+        return warning(1, (uint8_t*)"Cannot use 'git-log' in stdin\n");
+
+    char* basename = NULL;
+    CALLOC(basename, char, strlen(input_filename))
+    char* slash = strrchr(input_filename, '/');
+    if (slash)
+        strncpy(basename, slash+1, strlen(slash+1));
+    else
+        strncpy(basename, input_filename, strlen(input_filename));
+
+    fprintf(output, "<div id=\"git-log\">\nPrevious commit:\n");
+    uint8_t* command = NULL;
+    CALLOC(command, uint8_t, BUFSIZE)
+    u8_snprintf(command, BUFSIZE,
+            "git log -1 --pretty=format:\"%s %%h %%ci (%%cn) %%d\""
+            " || echo \"(Not in a Git repository)\"",
+        basename);
+    if (print_command(command, output))
+    {
+        fprintf(output, "</div><!--git-log-->\n");
+        return error(1, (uint8_t*)"git-log: Cannot run git\n");
+    }
+    fprintf(output, "</div><!--git-log-->\n");
+
+    free(command);
+    free(basename);
+
+    return 0;
+}
+
+int
+process_include(uint8_t* token, FILE* output, ULONG* state, 
+        BOOL read_yaml_macros_and_links)
+{
+    if (read_yaml_macros_and_links)
+        return 0;
+
+    if (!arg_zero)
+        exit(error(EINVAL, (uint8_t*)"Invalid argument zero\n"));
+
+    if (!input_filename)
+        return warning(1, (uint8_t*)"Cannot use 'include' in stdin\n");
+
+    uint8_t* command = NULL;
+    uint8_t* ptoken = u8_strchr(token, (ucs4_t)' ');
+    char* include_filename = NULL;
+    char* pinclude_filename = NULL;
+    CALLOC(include_filename, char, BUFSIZE)
+    pinclude_filename = include_filename;
+    
+    if (!ptoken)
+        return warning(1, (uint8_t*)"Directive 'include' requires"
+                " an argument\n");
+
+    ptoken++;
+    while (ptoken && *ptoken)
+        if (*ptoken != '"')
+            *pinclude_filename++ = *ptoken++;
+        else 
+            ptoken++;
+
+    CALLOC(command, uint8_t, BUFSIZE)
+    u8_snprintf(command, BUFSIZE, "%s -b -d %s %s/%s.slw", 
+            arg_zero, 
+            !strcmp(basedir, ".") ? input_dirname : basedir,
+            input_dirname,
+            include_filename);
+
+    if (print_command(command, output))
+    {
+        return error(1, (uint8_t*)"include: Cannot process include\n");
+    }
+
+    free(command);
+    free(include_filename);
+
+    return 0;
+}
+
+int
+filter_subdirs(const struct dirent* node)
+{
+    if (!node || !strcmp(node->d_name, ".") || !strcmp(node->d_name, ".."))
+        return 0;
+
+    struct stat st;
+    char* nodename = NULL;
+    
+    CALLOC(nodename, char, BUFSIZE)
+    snprintf(nodename, BUFSIZE, "%s/%s", basedir, node->d_name);
+    
+    if (lstat(nodename, &st) < 0 || !S_ISDIR(st.st_mode))
+    {
+        free(nodename);
+        return 0;
+    }
+
+    free(nodename);
+
+    return 1;
+}
+
+int
+filter_slw(const struct dirent* node)
+{
+    if (!node || !strcmp(node->d_name, ".") || !strcmp(node->d_name, ".."))
+        return 0;
+
+    size_t node_len = strlen(node->d_name);
+    size_t slw_len = strlen(".slw");
+
+    if (slw_len >= node_len)
+        return 0;
+
+    return (!strcmp(substr(node->d_name, 
+                    node_len - slw_len,
+                    node_len), ".slw"));
+}
+
+int 
+reverse_alphacompare(const struct dirent** a, const struct dirent** b)
+{
+    if (!a || !b)
+        return 0;
+
+    return -1 * strcmp((*a)->d_name, (*b)->d_name); 
+}
+
+int
+process_incdir_subdir(const char* subdirname, FILE* output, BOOL details_open,
+        uint8_t* macro_body)
+{
+    fprintf(output, "<li>\n<details%s>\n<summary>", 
+            details_open ? " open" : "");
+    if (macro_body)
+        fprintf(stdout, "%s", macro_body);
+    fprintf(output, "%s</summary>\n<div>\n", subdirname);
+
+    struct dirent** namelist;
+    struct dirent** pnamelist;
+    long names_total;
+    long names_output;
+    uint8_t* command = NULL;
+    char* abs_subdirname = NULL;
+    char* filename_noext = NULL;
+
+    CALLOC(abs_subdirname, char, BUFSIZE)
+    snprintf(abs_subdirname, BUFSIZE, "%s/%s", basedir, subdirname);
+
+    if ((names_total = scandir(abs_subdirname, &namelist, &filter_slw, 
+                &reverse_alphacompare)) < 0)
+    {
+        perror("scandir");
+        exit(error(errno, (uint8_t*)"incdir_subdir: scandir error\n"));
+    }
+
+    CALLOC(command, uint8_t, BUFSIZE);
+
+    pnamelist = namelist;
+    names_output = 0;
+    while (names_output < names_total && pnamelist && *pnamelist)
+    {
+        filename_noext = strip_ext((*pnamelist)->d_name);
+        char* in_filename = NULL;
+        char* in_line = NULL;
+        char* date = NULL;
+        char* day = NULL;
+        char* month = NULL;
+        char* year = NULL;
+        CALLOC(in_filename, char, BUFSIZE)
+        CALLOC(in_line, char, BUFSIZE)
+        snprintf(in_filename, BUFSIZE, "%s/%s", 
+                abs_subdirname, (*pnamelist)->d_name);
+        FILE* in = fopen(in_filename, "rt");
+        while (!feof(in))
+        {
+            if (!fgets(in_line, BUFSIZE, in))
+                break;
+            char* eol = strchr(in_line, '\n');
+            if (eol)
+                *eol = '\0';
+            if (startswith(in_line, "date: "))
+            {
+                date = strchr(in_line, ' ')+1;
+                break;
+            }
+        }
+        /* TODO: - Make this a separate directive, to make it more general.
+         *         For example, {timestamp "d.m.y"}.
+         *
+         *       - Make a new switch to talk to slweb subprocess from 
+         *         incdir inclusion  and signal the different handling
+         *         when standalone vs when included in incdir
+         *
+         *                                      -- SR */
+        if (date)
+        {
+            year = strtok(date, "-");
+            if (year)
+            {
+                month = strtok(NULL, "-");
+                if (month)
+                {
+                    day = strtok(NULL, "T");
+                    if (day)
+                    {
+                        fprintf(output, "<a href=\"%s/%s.html\">%s.%s.%s</a>",
+                                abs_subdirname, 
+                                filename_noext ? filename_noext 
+                                    : (*pnamelist)->d_name, 
+                                day,
+                                month,
+                                year);
+                    }
+                }
+            }
+        }
+        free(in_line);
+        free(in_filename);
+
+        u8_snprintf(command, BUFSIZE, "%s -b -d %s %s/%s",
+                arg_zero, abs_subdirname, abs_subdirname, 
+                (*pnamelist)->d_name);
+        if (print_command(command, output))
+        {
+            fprintf(output, "</div>\b</details>\n</li>\n");
+            if (filename_noext)
+                free(filename_noext);
+            free(abs_subdirname);
+            free(command);
+            return error(1, (uint8_t*)"process_incdir_subdir: Cannot process file '%s'\n", (*pnamelist)->d_name);
+        }
+        if (filename_noext)
+            free(filename_noext);
+        pnamelist++;
+        names_output++;
+    }
+
+    free(abs_subdirname);
+    free(command);
+
+    fprintf(output, "</div>\n</details>\n</li>\n");
+    return 0;
+}
+
+int
+process_incdir(uint8_t* token, FILE* output, KeyValue** macros, 
+        size_t* macros_count, KeyValue** pmacros, ULONG* state, 
+        BOOL read_yaml_macros_and_links)
+{
+    if (read_yaml_macros_and_links)
+        return 0;
+
+    uint8_t* saveptr = NULL;
+    /* skipping the first token (incdir) */
+    uint8_t* arg = u8_strtok(token, (uint8_t*)" ", &saveptr);
+    long num = 5;
+    uint8_t* macro_body = NULL;
+    struct dirent** namelist;
+    struct dirent** pnamelist;
+    long names_output;
+    BOOL details_open = TRUE;
+
+    arg = u8_strtok(NULL, (uint8_t*)" ", &saveptr);
+    if (!arg)
+        return warning(1, (uint8_t*)"incdir: Arguments required\n");
+    if (*arg == '=')
+    {
+        macro_body = get_value(*macros, *macros_count, arg+1, NULL);
+    }
+    else
+    {
+        uint8_t* parg = arg;
+        while (parg && *parg)
+        {
+            if (*parg < '0' || *parg > '9')
+                return warning(1, (uint8_t*)"incdir: Non-numeric argument\n");
+            parg++;
+        }
+        num = strtol((char*)arg, NULL, 10);
+        if (errno)
+            return warning(errno, (uint8_t*)"incdir: Invalid num\n");
+        arg = u8_strtok(NULL, (uint8_t*)" ", &saveptr);
+        if (*arg != '=')
+            return warning(1, (uint8_t*)"incdir: Second argument not macro\n");
+        macro_body = get_value(*macros, *macros_count, arg+1, NULL);
+    }
+
+    fprintf(output, "<ul class=\"incdir\">\n");
+
+    if (scandir(basedir, &namelist, &filter_subdirs,
+            &reverse_alphacompare) < 0)
+    {
+        perror("scandir");
+        exit(error(errno, (uint8_t*)"incdir: scandir error\n"));
+    }
+
+    pnamelist = namelist;
+    names_output = 0;
+    while (names_output < num && pnamelist && *pnamelist)
+    {
+        process_incdir_subdir((*pnamelist)->d_name, output, details_open,
+                macro_body);
+        details_open = FALSE;
+        pnamelist++;
+        names_output++;
+    }
+    free(namelist);
+
+    fprintf(output, "</ul>\n");
+
+    return 0;
+}
+
+int
+process_macro(uint8_t* token, FILE* output, KeyValue** macros, 
+        size_t* macros_count, KeyValue** pmacros, ULONG* state, 
+        BOOL read_yaml_macros_and_links, BOOL end_tag)
+{
+    if (!end_tag)
+    {
+        BOOL seen = FALSE;
+
+        uint8_t* macro_body = get_value(*macros, *macros_count, token+1,
+                read_yaml_macros_and_links ? NULL : &seen);
+
+        if (macro_body)
+        {
+            if (!read_yaml_macros_and_links)
+            {
+                if (seen)
+                    fprintf(output, "%s", macro_body);
+                else
+                    *state |= ST_MACRO_BODY;
+            }
+        }
+        else
+        {
+            if (read_yaml_macros_and_links)
+            {
+                (*macros_count)++;
+
+                if (*macros_count > 1)
+                {
+                    REALLOC(*macros, KeyValue, 
+                            *macros_count * sizeof(KeyValue))
+                    *pmacros = *macros + *macros_count - 1;
+                }
+                CALLOC((*pmacros)->key, uint8_t, u8_strlen(token+1))
+                (*pmacros)->seen = FALSE;
+                u8_strcpy((*pmacros)->key, token+1);
+                (*pmacros)->value = NULL;
+            }
+            *state |= ST_MACRO_BODY;
+        }
+    }
+    else
+    {
+        *state &= ~ST_MACRO_BODY;
+    }
     return 0;
 }
 
@@ -166,52 +580,7 @@ process_tag(uint8_t* token, FILE* output, KeyValue** macros,
     if (!strcmp((char*)token, "git-log")
             && !read_yaml_macros_and_links)   /* {git-log} */
     {
-        if (!input_filename)
-            return warning(1, (uint8_t*)"Cannot use 'git-log' in stdin\n");
-
-        char* basename = NULL;
-        CALLOC(basename, char, strlen(input_filename))
-        char* slash = strrchr(input_filename, '/');
-        if (slash)
-            strncpy(basename, slash+1, strlen(slash+1));
-        else
-            strncpy(basename, input_filename, strlen(input_filename));
-
-        fprintf(output, "<div id=\"git-log\">\nPrevious commit:\n");
-        uint8_t* command = NULL;
-        CALLOC(command, uint8_t, BUFSIZE)
-        u8_snprintf(command, BUFSIZE,
-                "git log -1 --pretty=format:\"%s %%h %%ci (%%cn) %%d\""
-                " || echo \"(Not in a Git repository)\"",
-            basename);
-        FILE* cmd_output = popen((char*)command, "r");
-        if (!cmd_output)
-        {
-            fprintf(output, "</div><!--git-log-->\n");
-            perror(PROGRAMNAME);
-            return warning(1, (uint8_t*)"git-log: Cannot popen\n");
-        }
-        uint8_t* cmd_output_line = NULL;
-        CALLOC(cmd_output_line, uint8_t, BUFSIZE)
-        while (!feof(cmd_output))
-        {
-            if (!fgets((char*)cmd_output_line, BUFSIZE, cmd_output))
-                continue;
-
-            char* eol = strchr((char*)cmd_output_line, '\n');
-            if (eol)
-                *eol = '\0';
-
-            fprintf(output, "%s\n", cmd_output_line);
-
-        }
-        pclose(cmd_output);
-        fprintf(output, "</div><!--git-log-->\n");
-
-        free(command);
-        free(cmd_output_line);
-        free(basename);
-
+        process_git_log(output);
     }
     else if (!strcmp((char*)token, "made-by")
             && !read_yaml_macros_and_links)   /* {made-by} */
@@ -222,118 +591,22 @@ process_tag(uint8_t* token, FILE* output, KeyValue** macros,
                 "© 2020 Strahinya Radich.\n"
                 "</div><!--made-by-->\n");
     }
-    else if (!strcmp(substr((char*)token, 0, strlen("include")), "include"))
-                                            /* {include} */
+    else if (startswith((char*)token, "include"))  /* {include} */
     {
-        if (!read_yaml_macros_and_links)
-        {
-            if (!arg_zero)
-                exit(error(EINVAL, (uint8_t*)"Invalid argument zero\n"));
-
-            if (!input_filename)
-                return warning(1, (uint8_t*)"Cannot use 'include' in stdin\n");
-
-            uint8_t* command = NULL;
-            uint8_t* ptoken = u8_strchr(token, (ucs4_t)' ');
-            char* include_filename = NULL;
-            char* pinclude_filename = NULL;
-            CALLOC(include_filename, char, BUFSIZE)
-            pinclude_filename = include_filename;
-            
-            *skip_eol = TRUE;
-
-            if (!ptoken)
-                return warning(1, (uint8_t*)"Directive 'include' requires"
-                        " an argument\n");
-
-            ptoken++;
-            while (ptoken && *ptoken)
-                if (*ptoken != '"')
-                    *pinclude_filename++ = *ptoken++;
-                else 
-                    ptoken++;
-
-            CALLOC(command, uint8_t, BUFSIZE)
-            u8_snprintf(command, BUFSIZE, "%s -b -d %s %s/%s.slw", 
-                    arg_zero, 
-                    !strcmp(basedir, ".") ? input_dirname : basedir,
-                    input_dirname,
-                    include_filename);
-
-            FILE* cmd_output = popen((char*)command, "r");
-            if (!cmd_output)
-            {
-                perror(PROGRAMNAME);
-                return warning(1, (uint8_t*)"include: Cannot popen\n");
-            }
-            uint8_t* cmd_output_line = NULL;
-            CALLOC(cmd_output_line, uint8_t, BUFSIZE)
-            while (!feof(cmd_output))
-            {
-                if (!fgets((char*)cmd_output_line, BUFSIZE, cmd_output))
-                    continue;
-
-                char* eol = strchr((char*)cmd_output_line, '\n');
-                if (eol)
-                    *eol = '\0';
-
-                fprintf(output, "%s\n", cmd_output_line);
-
-            }
-            pclose(cmd_output);
-
-            free(cmd_output_line);
-            free(command);
-            free(include_filename);
-        }
+        process_include(token, output, state, read_yaml_macros_and_links);
+        *skip_eol = TRUE;
+    }
+    else if (startswith((char*)token, "incdir"))   /* {incdir} */
+    {
+        process_incdir(token, output, macros, macros_count, pmacros, state,
+                read_yaml_macros_and_links);
         *skip_eol = TRUE;
     }
     else if (*token == '=')   /* {=macro} */
     {
+        process_macro(token, output, macros, macros_count, pmacros, state,
+                read_yaml_macros_and_links, end_tag);
         *skip_eol = TRUE;
-        if (!end_tag)
-        {
-            BOOL seen = FALSE;
-
-            uint8_t* macro_body = get_value(*macros, *macros_count, token+1,
-                    read_yaml_macros_and_links ? NULL : &seen);
-
-            if (macro_body)
-            {
-                if (!read_yaml_macros_and_links)
-                {
-                    if (seen)
-                        fprintf(output, "%s", macro_body);
-                    else
-                        *state |= ST_MACRO_BODY;
-                }
-            }
-            else
-            {
-                if (read_yaml_macros_and_links)
-                {
-                    (*macros_count)++;
-
-                    if (*macros_count > 1)
-                    {
-                        REALLOC(*macros, KeyValue, 
-                                *macros_count * sizeof(KeyValue))
-                        *pmacros = *macros + *macros_count - 1;
-                    }
-                    CALLOC((*pmacros)->key, uint8_t, u8_strlen(token+1))
-                    (*pmacros)->seen = FALSE;
-                    u8_strcpy((*pmacros)->key, token+1);
-                    (*pmacros)->value = NULL;
-                }
-                *state |= ST_MACRO_BODY;
-                *skip_eol = TRUE;
-            }
-        }
-        else
-        {
-            *state &= ~ST_MACRO_BODY;
-            *skip_eol = TRUE;
-        }
     }
     else if (!read_yaml_macros_and_links)   /* general tags */
     {
@@ -630,12 +903,7 @@ add_css(FILE* output, KeyValue* vars, size_t vars_count)
 int
 end_head_start_body(FILE* output, KeyValue* vars, size_t vars_count)
 {
-    uint8_t* title = get_value(vars, vars_count, (uint8_t*)"title", NULL);
-
     fprintf(output, "</head>\n<body>\n");
-
-    if (title)
-        fprintf(output, "<h2>%s</h2>\n", (char*)title);
 
     return 0;
 }
@@ -654,6 +922,9 @@ slweb_parse(uint8_t* buffer, FILE* output,
         KeyValue** links, size_t* links_count,
         BOOL body_only, BOOL read_yaml_macros_and_links)
 {
+    uint8_t* title = get_value(*vars, *vars_count, (uint8_t*)"title", NULL);
+    uint8_t* title_heading_level = get_value(*vars, *vars_count,
+            (uint8_t*)"title-heading-level", NULL);
     uint8_t* pbuffer = NULL;
     uint8_t* line = NULL;
     uint8_t* pline = NULL;
@@ -696,6 +967,12 @@ slweb_parse(uint8_t* buffer, FILE* output,
         add_css(output, *vars, *vars_count);
         end_head_start_body(output, *vars, *vars_count);
     }
+
+    if (title)
+        fprintf(output, "<h%s>%s</h%s>\n", 
+                title_heading_level ? (char*)title_heading_level : "2", 
+                (char*)title, 
+                title_heading_level ? (char*)title_heading_level : "2");
 
     do
     {
@@ -1089,8 +1366,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                         && *(pline+1) == ' ')
                 {
                     *ptoken = '\0';
-                    u8_strncat(ptoken, (uint8_t*)"<br />", 
-                            strlen("<br />"));
+                    u8_strncat(ptoken, (uint8_t*)"<br />", strlen("<br />"));
                     ptoken += strlen("<br />");
                     pline++;
                     colno++;
@@ -1372,7 +1648,8 @@ slweb_parse(uint8_t* buffer, FILE* output,
                     {
                         if (state & ST_LINK_SECOND_ARG)
                             process_inline_link(link_text, 
-                                    get_value(*macros, *macros_count, link_macro, NULL), 
+                                    get_value(*macros, *macros_count, 
+                                        link_macro, NULL), 
                                     token, output);
                         else
                             process_inline_image(link_text, token, output);
@@ -1401,7 +1678,8 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 {
                     if (!read_yaml_macros_and_links)
                         process_link(link_text, 
-                                get_value(*macros, *macros_count, link_macro, NULL), 
+                                get_value(*macros, *macros_count, 
+                                    link_macro, NULL), 
                                 token, *links, *links_count, output);
                     *token = '\0';
                     ptoken = token;
@@ -1558,7 +1836,6 @@ slweb_parse(uint8_t* buffer, FILE* output,
                     heading_level = 0;
                 }
                 else 
-                {
                     process_text_token(&state, first_line_in_doc,
                             previous_line_blank,
                             processed_start_of_line,
@@ -1567,7 +1844,6 @@ slweb_parse(uint8_t* buffer, FILE* output,
                             &token,
                             &ptoken,
                             TRUE);
-                }
             }
 
             if ((state & ST_PARA_OPEN)
@@ -1589,15 +1865,10 @@ slweb_parse(uint8_t* buffer, FILE* output,
             previous_line_blank = FALSE;
         }
 
-        if (!skip_eol)
-        {
-            if (!read_yaml_macros_and_links 
-                    && !(state & (ST_YAML | ST_YAML_VAL 
-                            | ST_LINK_SECOND_ARG)))
-            {
+        if (!skip_eol && !read_yaml_macros_and_links 
+                && !(state & (ST_YAML | ST_YAML_VAL 
+                        | ST_LINK_SECOND_ARG)))
                 fprintf(output, "\n");
-            }
-        }
 
         *token = '\0';
         ptoken = token;
@@ -1607,7 +1878,6 @@ slweb_parse(uint8_t* buffer, FILE* output,
             first_line_in_doc = FALSE;
 
         skip_change_first_line_in_doc = FALSE; 
-            ;
         if (line_len == 0)
             previous_line_blank = TRUE;
 
@@ -1746,9 +2016,6 @@ main(int argc, char** argv)
             CALLOC(input_dirname, char, 2)
             *input_dirname = '.';
         }
-
-        if (!strcmp(basedir, "."))
-            strcpy(basedir, input_dirname);
     }
     else
     {

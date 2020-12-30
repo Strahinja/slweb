@@ -1,6 +1,10 @@
                                       TODO
                                       ====
 
+    [ ] Make {timestamp "d.m.y"} directive
+    [ ] Add a switch to signal inclusion from incdir
+
+
 Migration to C checklist
 ------------------------
 
@@ -12,8 +16,8 @@ Migration to C checklist
     [x] Add {#id} processing
     [x] Convert strncat token processing to individual token-based
     [x] -d support (determine real pathname in links)
-    [ ] Add {lsdir}
+    [x] Add {incdir}
     [x] Add title: processing
-    [ ] Update manpage
+    [x] Update manpage
     [x] Add backslash-escaping of blank lines for normal tags
 

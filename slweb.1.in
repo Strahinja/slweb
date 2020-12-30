@@ -195,7 +195,7 @@ file, it will be replaced by the macro body.
 .
 .IP \[bu] 4
 .BR "Subdirectory inclusion (blogging directive)" .
-The command \fC{lsdirs \fInum\fC =\fImacroname\fC}\fR
+The command \fC{incdir \fInum\fC =\fImacroname\fC}\fR
 .RI ( num
 and
 .I macroname
@@ -203,8 +203,8 @@ are optional) will be expanded as follows:
 .
 .RS
 .IP 1. 4
-A \fC<ul class="dir">\fR tag will be inserted into the document instead of the
-directive.
+A \fC<ul class="incdir">\fR tag will be inserted into the document instead of
+the directive.
 .
 .IP 2. 4
 For every subdirectory of the directory containing the input file, up to
@@ -221,18 +221,16 @@ name of the subdirectory. If
 .I macroname
 is present, the name of the subdirectory will be prepended with the body of a
 macro
-.IR macroname .
+.I macroname
+(for example, this can be used to include custom
+.SM SVG
+files as arrows).
 .
 .IP 5. 4
 After the \fC<summary>\fR tag a \fC<div>\fR tag will be inserted into
-\fC<details>\fR, containing the concatenated contents of each
+\fC<details>\fR, containing the concatenated output from processing each of the
 .I .slw
-file inside that subdirectory in reverse lexicographical order (\fCsort -r\fR).
-For each file included in this manner, a \fC<h1>\fR tag will be prepended,
-containing the contents of that file's \fCtitle:\fR
-.SM YAML
-variable.
-.
+files inside that subdirectory in reverse lexicographical order.
 .RE
 .
 .IP \[bu]
@@ -255,15 +253,15 @@ home page.
 supported by slweb are:
 .
 .IP \[bu] 4
-.BR site-name .
-The contents of this variable will be inserted inside the \fC<title></title>\fR
-tags.
-.
-.IP \[bu] 4
 .BR site-desc .
 The contents of this variable will be inserted as the value of the
 .I content
 attribute of the \fC<meta name="description">\fR tag.
+.
+.IP \[bu] 4
+.BR site-name .
+The contents of this variable will be inserted inside the \fC<title></title>\fR
+tags.
 .
 .IP \[bu] 4
 .BR stylesheet .
@@ -274,8 +272,14 @@ have more than one \fCstylesheet\fR declaration per \fI.slw\fR file.
 .
 .IP \[bu] 4
 .BR title .
-If present, contents of this variable will be prepended to the body as a second
-level heading (\fCtitle: Some title\fR  becomes  \fC<h2>Some title</h2>\fR).
+If present, contents of this variable will be prepended to the body as a heading
+with the level determined by the \fCtitle-heading-level\fR variable, defaulting
+to 2.  (\fCtitle: Some title\fR  becomes  \fC<h2>Some title</h2>\fR).
+.
+.IP \[bu] 4
+.BR title-heading-level .
+See
+.BR title .
 .
 .SH "SEE ALSO"
 .BR sed (1)
@@ -337,18 +341,6 @@ file \fCindex.html\fR contains:
 .EE
 .
 .SH "KNOWN LIMITATIONS"
-.
-.IP \[bu] 4
-As of v0.3.0, 
-.B slweb 
-is undergoing a migration from Bash script using
-.BR sed (1)
-to a C program. Not all old features will be working or working as intended
-until this migration is complete. See the file
-.SM TODO
-in the Github repository and the
-.SM BUGS
-section below.
 .
 .IP \[bu] 4
 Currently there is no way to determine where the paragraph inside a tag should

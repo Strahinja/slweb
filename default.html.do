@@ -1,3 +1,3 @@
 redo-ifchange $2.slw slweb
-./slweb $2.slw >$3
+./slweb -d $(dirname $2.slw) $2.slw >$3
 

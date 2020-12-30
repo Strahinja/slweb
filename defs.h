@@ -20,6 +20,9 @@
 #ifndef __DEFS_H
 #define __DEFS_H
 
+#define _POSIX_C_SOURCE 200809L
+
+#include <dirent.h>
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -27,6 +30,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <unistr.h>
 #include <unistdio.h>
 #include <uniwidth.h>
