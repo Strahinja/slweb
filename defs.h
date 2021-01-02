@@ -31,19 +31,25 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 #include <unistr.h>
 #include <unistdio.h>
 #include <uniwidth.h>
 
-#define PROGRAMNAME "slweb"
-#define VERSION "0.3.0-beta"
+#define PROGRAMNAME   "slweb"
+#define VERSION       "0.3.2-beta"
 
-#define BUFSIZE 1024
+#define BUFSIZE       1024
+#define DATEBUFSIZE   12
+
+const char* timestamp_format     = "d.m.y";
+const char* timestamp_output_ext = ".html";
 
 typedef enum
 {
     FALSE = 0,
-    TRUE = 1
+    TRUE  = 1
 } BOOL;
 
 typedef unsigned char UBYTE;
