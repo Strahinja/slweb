@@ -1,8 +1,10 @@
                                       TODO
                                       ====
 
-    [ ] Make {timestamp "d.m.y"} directive
-    [ ] Add a switch to signal inclusion from incdir
+    [/] ~Make {timestamp "d.m.y"} directive~
+        (Replaced by date variable.)
+    [/] ~Add a switch to signal inclusion from incdir~
+        (Replaced by calls to fork().)
 
 
 Migration to C checklist

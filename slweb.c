@@ -19,12 +19,12 @@
 
 #include "defs.h"
 
-static size_t lineno = 0;
-static size_t colno = 1;
+static size_t lineno        = 0;
+static size_t colno         = 1;
 static char* input_filename = NULL;
-static char* input_dirname = NULL;
-static char* basedir = NULL;
-static char* arg_zero = NULL;
+static char* input_dirname  = NULL;
+static char* basedir        = NULL;
+static char* arg_zero       = NULL;
 
 #define CHECKEXITNOMEM(ptr) { if (!ptr) exit(error(ENOMEM, \
                 (uint8_t*)"Memory allocation failed (out of memory?)\n")); }
@@ -75,6 +75,13 @@ warning(int code, uint8_t* fmt, ...)
     fprintf(stderr, "Warning: %s", buf);
     return code;
 }
+
+int
+slweb_parse(uint8_t* buffer, FILE* output, 
+        KeyValue** vars, size_t* vars_count, 
+        KeyValue** macros, size_t* macros_count,
+        KeyValue** links, size_t* links_count,
+        BOOL body_only, BOOL read_yaml_macros_and_links);
 
 char*
 substr(const char* src, int start, int finish)
@@ -191,6 +198,40 @@ print_command(uint8_t* command, FILE* output)
 }
 
 int
+read_file_into_buffer(uint8_t** buffer, char* input_filename, 
+        char** input_dirname, FILE** input)
+{
+    struct stat fs;
+    char* slash = NULL;
+
+    *input = fopen(input_filename, "r");
+    if (!*input)
+        return error(ENOENT, (uint8_t*)"No such file: %s\n", input_filename);
+
+    fstat(fileno(*input), &fs);
+    CALLOC(*buffer, uint8_t, fs.st_size)
+    fread((void*)*buffer, sizeof(char), fs.st_size, *input);
+
+    slash = strrchr(input_filename, '/');
+    if (slash)
+    {
+        CALLOC(*input_dirname, char, BUFSIZE)
+        char* pinput_dirname = *input_dirname;
+        char* pinput_filename = input_filename;
+        while (pinput_filename && *pinput_filename
+                && pinput_filename != slash)
+            *pinput_dirname++ = *pinput_filename++;
+    }
+    else
+    {
+        CALLOC(*input_dirname, char, 2)
+        **input_dirname = '.';
+    }
+
+    return 0;
+}
+
+int
 process_heading(uint8_t* token, FILE* output, UBYTE heading_level)
 {
     if (!token || u8_strlen(token) < 1)
@@ -238,6 +279,9 @@ process_git_log(FILE* output)
 
 int
 process_include(uint8_t* token, FILE* output, ULONG* state, 
+        KeyValue** vars, size_t* vars_count,
+        KeyValue** macros, size_t* macros_count,
+        KeyValue** links, size_t* links_count,
         BOOL read_yaml_macros_and_links)
 {
     if (read_yaml_macros_and_links)
@@ -249,7 +293,6 @@ process_include(uint8_t* token, FILE* output, ULONG* state,
     if (!input_filename)
         return warning(1, (uint8_t*)"Cannot use 'include' in stdin\n");
 
-    uint8_t* command = NULL;
     uint8_t* ptoken = u8_strchr(token, (ucs4_t)' ');
     char* include_filename = NULL;
     char* pinclude_filename = NULL;
@@ -267,20 +310,45 @@ process_include(uint8_t* token, FILE* output, ULONG* state,
         else 
             ptoken++;
 
-    CALLOC(command, uint8_t, BUFSIZE)
-    u8_snprintf(command, BUFSIZE, "%s -b -d %s %s/%s.slw", 
-            arg_zero, 
-            !strcmp(basedir, ".") ? input_dirname : basedir,
-            input_dirname,
-            include_filename);
+    fflush(output);
+    pid_t pid = fork();
+    int pstatus = 0;
 
-    if (print_command(command, output))
+    if (pid > 0)
+        wait(&pstatus);
+    else if (pid == 0)
     {
-        return error(1, (uint8_t*)"include: Cannot process include\n");
-    }
+        if (!strcmp(basedir, "."))
+            strncpy(basedir, input_dirname, strlen(input_dirname));
 
-    free(command);
-    free(include_filename);
+        sprintf(input_filename, "%s/%s.slw",
+                input_dirname,
+                include_filename);
+
+        FILE* input = NULL;
+        FILE* output = stdout;
+        uint8_t* buffer = NULL;
+
+        read_file_into_buffer(&buffer, input_filename, &input_dirname, &input);
+
+        free(*links);
+        CALLOC(*links, KeyValue, 1)
+        (*links)->key = NULL;
+        (*links)->value = NULL;
+        *links_count = 0;
+
+        /* First pass: read YAML, macros and links */
+        slweb_parse(buffer, output, vars, vars_count, macros, macros_count,
+                links, links_count, TRUE, TRUE);
+
+        /* Second pass: parse and output */
+        slweb_parse(buffer, output, vars, vars_count, macros, macros_count, 
+                links, links_count, TRUE, FALSE);
+
+        exit(0);
+    }
+    else
+        exit(error(1, (uint8_t*)"Fork failed\n"));
 
     return 0;
 }
@@ -336,10 +404,12 @@ reverse_alphacompare(const struct dirent** a, const struct dirent** b)
 
 int
 process_incdir_subdir(const char* subdirname, FILE* output, BOOL details_open,
-        uint8_t* macro_body)
+        uint8_t* macro_body, ULONG* state,
+        KeyValue** vars, size_t* vars_count,
+        KeyValue** macros, size_t* macros_count,
+        KeyValue** links, size_t* links_count)
 {
-    fprintf(output, "<li>\n<details%s>\n<summary>", 
-            details_open ? " open" : "");
+    fprintf(output, "<li>\n<details%s>\n<summary>", details_open ? " open" : "");
     if (macro_body)
         fprintf(stdout, "%s", macro_body);
     fprintf(output, "%s</summary>\n<div>\n", subdirname);
@@ -348,9 +418,7 @@ process_incdir_subdir(const char* subdirname, FILE* output, BOOL details_open,
     struct dirent** pnamelist;
     long names_total;
     long names_output;
-    uint8_t* command = NULL;
     char* abs_subdirname = NULL;
-    char* filename_noext = NULL;
 
     CALLOC(abs_subdirname, char, BUFSIZE)
     snprintf(abs_subdirname, BUFSIZE, "%s/%s", basedir, subdirname);
@@ -362,100 +430,61 @@ process_incdir_subdir(const char* subdirname, FILE* output, BOOL details_open,
         exit(error(errno, (uint8_t*)"incdir_subdir: scandir error\n"));
     }
 
-    CALLOC(command, uint8_t, BUFSIZE);
-
     pnamelist = namelist;
     names_output = 0;
     while (names_output < names_total && pnamelist && *pnamelist)
     {
-        filename_noext = strip_ext((*pnamelist)->d_name);
-        char* in_filename = NULL;
-        char* in_line = NULL;
-        char* date = NULL;
-        char* day = NULL;
-        char* month = NULL;
-        char* year = NULL;
-        CALLOC(in_filename, char, BUFSIZE)
-        CALLOC(in_line, char, BUFSIZE)
-        snprintf(in_filename, BUFSIZE, "%s/%s", 
-                abs_subdirname, (*pnamelist)->d_name);
-        FILE* in = fopen(in_filename, "rt");
-        while (!feof(in))
-        {
-            if (!fgets(in_line, BUFSIZE, in))
-                break;
-            char* eol = strchr(in_line, '\n');
-            if (eol)
-                *eol = '\0';
-            if (startswith(in_line, "date: "))
-            {
-                date = strchr(in_line, ' ')+1;
-                break;
-            }
-        }
-        /* TODO: - Make this a separate directive, to make it more general.
-         *         For example, {timestamp "d.m.y"}.
-         *
-         *       - Make a new switch to talk to slweb subprocess from 
-         *         incdir inclusion  and signal the different handling
-         *         when standalone vs when included in incdir
-         *
-         *                                      -- SR */
-        if (date)
-        {
-            year = strtok(date, "-");
-            if (year)
-            {
-                month = strtok(NULL, "-");
-                if (month)
-                {
-                    day = strtok(NULL, "T");
-                    if (day)
-                    {
-                        fprintf(output, "<div class=\"heading-link\">\n"
-                                "<a href=\"%s/%s.html\">%s.%s.%s</a>\n"
-                                "</div>",
-                                abs_subdirname, 
-                                filename_noext ? filename_noext 
-                                    : (*pnamelist)->d_name, 
-                                day,
-                                month,
-                                year);
-                    }
-                }
-            }
-        }
-        free(in_line);
-        free(in_filename);
+        fflush(output);
+        pid_t pid = fork();
+        int pstatus = 0;
 
-        u8_snprintf(command, BUFSIZE, "%s -b -d %s %s/%s",
-                arg_zero, abs_subdirname, abs_subdirname, 
-                (*pnamelist)->d_name);
-        if (print_command(command, output))
+        if (pid > 0)
+            wait(&pstatus);
+        else if (pid == 0)
         {
-            fprintf(output, "</div>\b</details>\n</li>\n");
-            if (filename_noext)
-                free(filename_noext);
-            free(abs_subdirname);
-            free(command);
-            return error(1, (uint8_t*)"process_incdir_subdir: Cannot process file '%s'\n", (*pnamelist)->d_name);
+            strncpy(basedir, abs_subdirname, strlen(abs_subdirname));
+            sprintf(input_filename, "%s/%s", abs_subdirname, 
+                    (*pnamelist)->d_name);
+
+            FILE* input = NULL;
+            FILE* output = stdout;
+            uint8_t* buffer = NULL;
+
+            read_file_into_buffer(&buffer, input_filename, &input_dirname, 
+                    &input);
+
+            free(*links);
+            CALLOC(*links, KeyValue, 1)
+            (*links)->key = NULL;
+            (*links)->value = NULL;
+            *links_count = 0;
+
+            /* First pass: read YAML, macros and links */
+            slweb_parse(buffer, output, vars, vars_count, macros, macros_count,
+                    links, links_count, TRUE, TRUE);
+
+            /* Second pass: parse and output */
+            slweb_parse(buffer, output, vars, vars_count, macros, macros_count, 
+                    links, links_count, TRUE, FALSE);
+            exit(0);
         }
-        if (filename_noext)
-            free(filename_noext);
+        else
+            exit(error(1, (uint8_t*)"Fork failed\n"));
+
         pnamelist++;
         names_output++;
     }
 
     free(abs_subdirname);
-    free(command);
 
     fprintf(output, "</div>\n</details>\n</li>\n");
     return 0;
 }
 
 int
-process_incdir(uint8_t* token, FILE* output, KeyValue** macros, 
-        size_t* macros_count, KeyValue** pmacros, ULONG* state, 
+process_incdir(uint8_t* token, FILE* output, KeyValue** vars, 
+        size_t* vars_count, KeyValue** macros, size_t* macros_count, 
+        KeyValue** pmacros, KeyValue** links, size_t* links_count, ULONG* state, 
         BOOL read_yaml_macros_and_links)
 {
     if (read_yaml_macros_and_links)
@@ -475,9 +504,7 @@ process_incdir(uint8_t* token, FILE* output, KeyValue** macros,
     if (!arg)
         return warning(1, (uint8_t*)"incdir: Arguments required\n");
     if (*arg == '=')
-    {
         macro_body = get_value(*macros, *macros_count, arg+1, NULL);
-    }
     else
     {
         uint8_t* parg = arg;
@@ -510,7 +537,8 @@ process_incdir(uint8_t* token, FILE* output, KeyValue** macros,
     while (names_output < num && pnamelist && *pnamelist)
     {
         process_incdir_subdir((*pnamelist)->d_name, output, details_open,
-                macro_body);
+                macro_body, state,
+                vars, vars_count, macros, macros_count, links, links_count);
         details_open = FALSE;
         pnamelist++;
         names_output++;
@@ -518,6 +546,61 @@ process_incdir(uint8_t* token, FILE* output, KeyValue** macros,
     free(namelist);
 
     fprintf(output, "</ul>\n");
+
+    return 0;
+}
+
+int
+process_timestamp(FILE* output, const char* link, uint8_t* date)
+{
+    uint8_t* day = NULL;
+    uint8_t* month = NULL;
+    uint8_t* year = NULL;
+    uint8_t* formatted_date = NULL;
+    uint8_t* ptr = NULL;
+    const char* ptimestamp_format = NULL;
+    char* in_filename = NULL;
+    char* in_line = NULL;
+
+    CALLOC(formatted_date, uint8_t, DATEBUFSIZE)
+    ptr = NULL;
+    year = u8_strtok(date, (uint8_t*)"-", &ptr);
+    if (year)
+    {
+        month = u8_strtok(NULL, (uint8_t*)"-", &ptr);
+        if (month)
+        {
+            day = u8_strtok(NULL, (uint8_t*)"T", &ptr);
+            if (day)
+            {
+                ptimestamp_format = timestamp_format;
+                while (*ptimestamp_format)
+                {
+                    if (*ptimestamp_format == 'd' 
+                            || *ptimestamp_format == 'D')
+                        u8_strncat(formatted_date, day, u8_strlen(day));
+                    else if (*ptimestamp_format == 'm' 
+                            || *ptimestamp_format == 'M')
+                        u8_strncat(formatted_date, month, u8_strlen(month));
+                    else if (*ptimestamp_format == 'y' 
+                            || *ptimestamp_format == 'Y')
+                        u8_strncat(formatted_date, year, u8_strlen(year));
+                    else
+                        *(formatted_date + u8_strlen(formatted_date)) 
+                            = *ptimestamp_format;
+
+                    ptimestamp_format++;
+                }
+                fprintf(output, "<a href=\"%s\" class=\"timestamp\">%s</a>\n",
+                        link,
+                        formatted_date);
+            }
+        }
+    }
+
+    free(formatted_date);
+    free(in_line);
+    free(in_filename);
 
     return 0;
 }
@@ -565,17 +648,17 @@ process_macro(uint8_t* token, FILE* output, KeyValue** macros,
         }
     }
     else
-    {
         *state &= ~ST_MACRO_BODY;
-    }
+
     return 0;
 }
 
 int
 process_tag(uint8_t* token, FILE* output, KeyValue** macros, 
-        size_t* macros_count, KeyValue** pmacros, ULONG* state, 
-        BOOL read_yaml_macros_and_links, BOOL* skip_eol,
-        BOOL end_tag)
+        size_t* macros_count, KeyValue** pmacros, KeyValue** vars,
+        size_t* vars_count, KeyValue** links, size_t* links_count,
+        ULONG* state, BOOL read_yaml_macros_and_links, 
+        BOOL* skip_eol, BOOL end_tag)
 {
     if (!token || u8_strlen(token) < 1)
         return warning(1, (uint8_t*)"Empty tag name\n");
@@ -596,12 +679,15 @@ process_tag(uint8_t* token, FILE* output, KeyValue** macros,
     }
     else if (startswith((char*)token, "include"))  /* {include} */
     {
-        process_include(token, output, state, read_yaml_macros_and_links);
+        process_include(token, output, state, vars, vars_count,
+                macros, macros_count, links, links_count,
+                read_yaml_macros_and_links);
         *skip_eol = TRUE;
     }
     else if (startswith((char*)token, "incdir"))   /* {incdir} */
     {
-        process_incdir(token, output, macros, macros_count, pmacros, state,
+        process_incdir(token, output, vars, vars_count, macros, macros_count,
+                pmacros, links, links_count, state,
                 read_yaml_macros_and_links);
         *skip_eol = TRUE;
     }
@@ -818,8 +904,7 @@ process_image(uint8_t* image_text, uint8_t* image_id, KeyValue* links,
 int
 process_inline_image(uint8_t* image_text, uint8_t* image_url, FILE* output)
 {
-    fprintf(output, "<img src=\"%s\" alt=\"%s\" />", 
-            image_url, image_text);
+    fprintf(output, "<img src=\"%s\" alt=\"%s\" />", image_url, image_text);
     return 0;
 }
 
@@ -884,8 +969,8 @@ begin_html_and_head(FILE* output, KeyValue* vars, size_t vars_count)
         fprintf(output, "<meta name=\"description\" content=\"%s\" />\n",
                 (char*)site_desc);
 
-    fprintf(output, "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n"
-            "<meta name=\"generator\" content=\"slweb\" />\n");
+    fprintf(output, "<meta name=\"viewport\" content=\"width=device-width,"
+            " initial-scale=1\" />\n<meta name=\"generator\" content=\"slweb\" />\n");
     return 0;
 }
 
@@ -925,34 +1010,45 @@ slweb_parse(uint8_t* buffer, FILE* output,
         KeyValue** links, size_t* links_count,
         BOOL body_only, BOOL read_yaml_macros_and_links)
 {
-    uint8_t* title = get_value(*vars, *vars_count, (uint8_t*)"title", NULL);
-    uint8_t* title_heading_level = get_value(*vars, *vars_count,
-            (uint8_t*)"title-heading-level", NULL);
-    uint8_t* pbuffer = NULL;
-    uint8_t* line = NULL;
-    uint8_t* pline = NULL;
-    size_t line_len = 0;
-    uint8_t* token = NULL;
-    uint8_t* ptoken = NULL;
-    uint8_t* link_text = NULL;
-    uint8_t* link_macro = NULL;
-    KeyValue* pvars = NULL;
-    KeyValue* plinks = NULL;
-    KeyValue* pmacros = NULL;
-    ULONG state = ST_NONE;
-    UBYTE heading_level = 0;
-    BOOL end_tag = FALSE;
-    BOOL first_line_in_doc = TRUE;
+    uint8_t* title                     = NULL;
+    uint8_t* title_heading_level       = NULL;
+    uint8_t* date                      = NULL;
+    uint8_t* pbuffer                   = NULL;
+    uint8_t* line                      = NULL;
+    uint8_t* pline                     = NULL;
+    size_t line_len                    = 0;
+    uint8_t* token                     = NULL;
+    uint8_t* ptoken                    = NULL;
+    uint8_t* link_text                 = NULL;
+    uint8_t* link_macro                = NULL;
+    KeyValue* pvars                    = NULL;
+    KeyValue* plinks                   = NULL;
+    KeyValue* pmacros                  = NULL;
+    ULONG state                        = ST_NONE;
+    UBYTE heading_level                = 0;
+    BOOL end_tag                       = FALSE;
+    BOOL first_line_in_doc             = TRUE;
     BOOL skip_change_first_line_in_doc = FALSE;
-    BOOL skip_eol = FALSE;
-    BOOL previous_line_blank = FALSE;
-    BOOL processed_start_of_line = FALSE;
+    BOOL skip_eol                      = FALSE;
+    BOOL previous_line_blank           = FALSE;
+    BOOL processed_start_of_line       = FALSE;
 
     if (!buffer)
         exit(error(1, (uint8_t*)"Empty buffer\n"));
 
     if (!vars || !*vars)
         exit(error(EINVAL, (uint8_t*)"Invalid argument (vars)\n"));
+
+    if (!links || !*links)
+        exit(error(EINVAL, (uint8_t*)"Invalid argument (links)\n"));
+
+    if (!macros || !*macros)
+        exit(error(EINVAL, (uint8_t*)"Invalid argument (macros)\n"));
+
+    title = get_value(*vars, *vars_count, (uint8_t*)"title", NULL);
+    title_heading_level = get_value(*vars, *vars_count,
+            (uint8_t*)"title-heading-level", NULL);
+    date = get_value(*vars, *vars_count, (uint8_t*)"date", NULL);
 
     CALLOC(line, uint8_t, BUFSIZE)
     CALLOC(token, uint8_t, BUFSIZE)
@@ -976,6 +1072,28 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 title_heading_level ? (char*)title_heading_level : "2", 
                 (char*)title, 
                 title_heading_level ? (char*)title_heading_level : "2");
+
+    if (date && input_filename)
+    {
+        char* link = strip_ext(input_filename);
+        uint8_t* samedir_permalink = get_value(*vars, *vars_count, 
+                (uint8_t*)"samedir-permalink", NULL);
+        char* real_link = NULL;
+        CALLOC(real_link, char, BUFSIZE)
+
+        strncat(link, timestamp_output_ext, strlen(timestamp_output_ext));
+
+        if (samedir_permalink && !u8_strcmp(samedir_permalink, (uint8_t*)"1"))
+        {
+            get_realpath(&real_link, input_dirname, link);
+            process_timestamp(output, real_link, date);
+        }
+        else
+            process_timestamp(output, link, date);
+
+        free(real_link);
+        free(link);
+    }
 
     do
     {
@@ -1476,8 +1594,8 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 *ptoken = '\0';
 
                 process_tag(token, output, macros, macros_count,
-                        &pmacros, &state, read_yaml_macros_and_links, 
-                        &skip_eol, end_tag);
+                        &pmacros, vars, vars_count, links, links_count,
+                        &state, read_yaml_macros_and_links, &skip_eol, end_tag);
 
                 *token = '\0';
                 ptoken = token;
@@ -1990,36 +2108,9 @@ main(int argc, char** argv)
     FILE* input = NULL;
     FILE* output = stdout;
     uint8_t* buffer = NULL;
-    char* slash = NULL;
 
     if (input_filename)
-    {
-        struct stat fs;
-
-        input = fopen((char*)input_filename, "r");
-        if (!input)
-            return error(ENOENT, (uint8_t*)"No such file: %s\n", input_filename);
-
-        fstat(fileno(input), &fs);
-        CALLOC(buffer, uint8_t, fs.st_size)
-        fread((void*)buffer, sizeof(char), fs.st_size, input);
-
-        slash = strrchr(input_filename, '/');
-        if (slash)
-        {
-            CALLOC(input_dirname, char, BUFSIZE)
-            char* pinput_dirname = input_dirname;
-            char* pinput_filename = input_filename;
-            while (pinput_filename && *pinput_filename
-                    && pinput_filename != slash)
-                *pinput_dirname++ = *pinput_filename++;
-        }
-        else
-        {
-            CALLOC(input_dirname, char, 2)
-            *input_dirname = '.';
-        }
-    }
+        read_file_into_buffer(&buffer, input_filename, &input_dirname, &input);
     else
     {
         uint8_t* bufline = NULL;
