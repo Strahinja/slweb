@@ -322,7 +322,7 @@ process_include(uint8_t* token, FILE* output, ULONG* state,
             strncpy(basedir, input_dirname, strlen(input_dirname));
 
         sprintf(input_filename, "%s/%s.slw",
-                input_dirname,
+                basedir,
                 include_filename);
 
         FILE* input = NULL;
@@ -551,7 +551,8 @@ process_incdir(uint8_t* token, FILE* output, KeyValue** vars,
 }
 
 int
-process_timestamp(FILE* output, const char* link, uint8_t* date)
+process_timestamp(FILE* output, const char* link, uint8_t* permalink_macro,
+        uint8_t* date)
 {
     uint8_t* day = NULL;
     uint8_t* month = NULL;
@@ -591,8 +592,9 @@ process_timestamp(FILE* output, const char* link, uint8_t* date)
 
                     ptimestamp_format++;
                 }
-                fprintf(output, "<a href=\"%s\" class=\"timestamp\">%s</a>\n",
+                fprintf(output, "<a href=\"%s\" class=\"timestamp\">%s%s</a>\n",
                         link,
+                        permalink_macro ? (char*)permalink_macro : "",
                         formatted_date);
             }
         }
@@ -829,64 +831,32 @@ get_realpath(char** realpath, char* relativeto, char* path)
 }
 
 int
-process_link(uint8_t* link_text, uint8_t* link_macro_body, uint8_t* link_id, 
-        KeyValue* links, size_t links_count, FILE* output)
+process_inline_link(uint8_t* link_text, uint8_t* link_macro_body, 
+        uint8_t* link_url, FILE* output)
 {
-    char* url = (char*)get_value(links, links_count, link_id, NULL);
-    char* link_dir = NULL;
-    BOOL local = FALSE;
-    BOOL dir_is_dot = FALSE;
-
-    if (url)
-        local = url_is_local(url);
-   
-    if (local)
-    {
-        CALLOC(link_dir, char, BUFSIZE)
-        get_realpath(&link_dir, basedir, input_dirname ? input_dirname : ".");
-        dir_is_dot = !strcmp(link_dir, ".");
-    }
-
-    fprintf(output, "<a href=\"%s%s%s\">%s%s</a>", 
-            url && local && !dir_is_dot ? link_dir : "",
-            url && local && !dir_is_dot && url ? "/" : "",
-            url ? (char*)url : "", 
+    fprintf(output, "<a href=\"%s\">%s%s</a>", 
+            link_url ? (char*)link_url : "", 
             link_macro_body ? (char*)link_macro_body : "",
             link_text);
-
-    if (local)
-        free(link_dir);
 
     return 0;
 }
 
 int
-process_inline_link(uint8_t* link_text, uint8_t* link_macro_body, 
-        uint8_t* link_url, FILE* output)
+process_link(uint8_t* link_text, uint8_t* link_macro_body, uint8_t* link_id, 
+        KeyValue* links, size_t links_count, FILE* output)
 {
-    char* link_dir = NULL;
-    BOOL local = FALSE;
-    BOOL dir_is_dot = FALSE;
+    uint8_t* url = get_value(links, links_count, link_id, NULL);
+    return process_inline_link(link_text, link_macro_body,
+            url, output);
+}
 
-    if (link_url)
-        local = url_is_local((char*)link_url);
-
-    if (local)
-    {
-        CALLOC(link_dir, char, BUFSIZE)
-        get_realpath(&link_dir, basedir, input_dirname ? input_dirname : ".");
-        dir_is_dot = !strcmp(link_dir, ".");
-    }
-
-    fprintf(output, "<a href=\"%s%s%s\">%s%s</a>", 
-            link_url && local && !dir_is_dot ? link_dir : "",
-            link_url && local && !dir_is_dot && link_url ? "/" : "",
-            link_url ? (char*)link_url : "", 
-            link_macro_body ? (char*)link_macro_body : "",
-            link_text);
-
-    if (local)
-        free(link_dir);
+int
+process_inline_image(uint8_t* image_text, uint8_t* image_url, FILE* output)
+{
+    fprintf(output, "<img src=\"%s\" alt=\"%s\" />",
+            image_url ? (char*)image_url : "", 
+            image_text);
 
     return 0;
 }
@@ -896,16 +866,7 @@ process_image(uint8_t* image_text, uint8_t* image_id, KeyValue* links,
         size_t links_count, FILE* output)
 {
     uint8_t* url = get_value(links, links_count, image_id, NULL);
-    fprintf(output, "<img src=\"%s\" alt=\"%s\" />", 
-            url ? (char*)url : "", image_text);
-    return 0;
-}
-
-int
-process_inline_image(uint8_t* image_text, uint8_t* image_url, FILE* output)
-{
-    fprintf(output, "<img src=\"%s\" alt=\"%s\" />", image_url, image_text);
-    return 0;
+    return process_inline_image(image_text, url, output);
 }
 
 int
@@ -1013,6 +974,8 @@ slweb_parse(uint8_t* buffer, FILE* output,
     uint8_t* title                     = NULL;
     uint8_t* title_heading_level       = NULL;
     uint8_t* date                      = NULL;
+    uint8_t* permalink_url             = NULL;
+    uint8_t* ext_in_permalink          = NULL;
     uint8_t* pbuffer                   = NULL;
     uint8_t* line                      = NULL;
     uint8_t* pline                     = NULL;
@@ -1049,6 +1012,8 @@ slweb_parse(uint8_t* buffer, FILE* output,
     title_heading_level = get_value(*vars, *vars_count,
             (uint8_t*)"title-heading-level", NULL);
     date = get_value(*vars, *vars_count, (uint8_t*)"date", NULL);
+    permalink_url = get_value(*vars, *vars_count, (uint8_t*)"permalink-url", NULL);
+    ext_in_permalink = get_value(*vars, *vars_count, (uint8_t*)"ext-in-permalink", NULL);
 
     CALLOC(line, uint8_t, BUFSIZE)
     CALLOC(token, uint8_t, BUFSIZE)
@@ -1079,17 +1044,22 @@ slweb_parse(uint8_t* buffer, FILE* output,
         uint8_t* samedir_permalink = get_value(*vars, *vars_count, 
                 (uint8_t*)"samedir-permalink", NULL);
         char* real_link = NULL;
+        uint8_t* permalink_macro = get_value(*macros, *macros_count,
+                (uint8_t*)"permalink", NULL);
         CALLOC(real_link, char, BUFSIZE)
 
-        strncat(link, timestamp_output_ext, strlen(timestamp_output_ext));
+        if (ext_in_permalink && *ext_in_permalink != (ucs4_t)'0')
+            strncat(link, timestamp_output_ext, strlen(timestamp_output_ext));
 
-        if (samedir_permalink && !u8_strcmp(samedir_permalink, (uint8_t*)"1"))
+        if (permalink_url)
+            process_timestamp(output, (char*)permalink_url, permalink_macro, date);
+        else if (samedir_permalink && !u8_strcmp(samedir_permalink, (uint8_t*)"1"))
         {
             get_realpath(&real_link, input_dirname, link);
-            process_timestamp(output, real_link, date);
+            process_timestamp(output, real_link, permalink_macro, date);
         }
         else
-            process_timestamp(output, link, date);
+            process_timestamp(output, link, permalink_macro, date);
 
         free(real_link);
         free(link);
