@@ -241,7 +241,8 @@ files inside that subdirectory in reverse lexicographical order, in a manner
 similar to the
 .I include
 directive. (See
-.BR Includes " and " samedir-permalink " variable.)"
+.BR Includes " and " date ", " ext-in-permalink ", " permalink-url ", " 
+.BR samedir-permalink " variables.)"
 .RE
 .
 .IP \[bu]

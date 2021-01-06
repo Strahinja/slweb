@@ -926,6 +926,14 @@ begin_html_and_head(FILE* output, KeyValue* vars, size_t vars_count)
             "<title>%s</title>\n"
             "<meta charset=\"utf8\" />\n",
             site_name ? (char*)site_name : "");
+
+    char* favicon = NULL;
+    CALLOC(favicon, char, BUFSIZE)
+    sprintf(favicon, "%s/favicon.ico", basedir);
+    if (!access(favicon, R_OK))
+        fprintf(output, "<link rel=\"shortcut icon\" type=\"image/x-icon\""
+                " href=\"/favicon.ico\" />\n");
+    free(favicon);
     
     if (site_desc && *site_desc)
         fprintf(output, "<meta name=\"description\" content=\"%s\" />\n",
