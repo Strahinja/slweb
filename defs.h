@@ -1,6 +1,6 @@
 /*
  *    slweb - Simple static webpage generator
- *    Copyright (C) 2020  Страхиња Радић
+ *    Copyright (C) 2020, 2021 Страхиња Радић
  *
  *    This program is free software: you can redistribute it and/or modify it
  *    under the terms of the GNU General Public License as published by the Free
@@ -39,6 +39,7 @@
 
 #define PROGRAMNAME   "slweb"
 #define VERSION       "0.3.2-beta"
+#define COPYRIGHTYEAR "2020, 2021"
 
 #define BUFSIZE       1024
 #define DATEBUFSIZE   12
