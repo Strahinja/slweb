@@ -38,7 +38,7 @@
 #include <uniwidth.h>
 
 #define PROGRAMNAME   "slweb"
-#define VERSION       "0.3.2-beta"
+#define VERSION       "0.3.3-beta"
 #define COPYRIGHTYEAR "2020, 2021"
 
 #define BUFSIZE       1024
