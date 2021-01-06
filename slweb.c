@@ -919,6 +919,7 @@ begin_html_and_head(FILE* output, KeyValue* vars, size_t vars_count)
 {
     uint8_t* site_name = get_value(vars, vars_count, (uint8_t*)"site-name", NULL);
     uint8_t* site_desc = get_value(vars, vars_count, (uint8_t*)"site-desc", NULL);
+    uint8_t* favicon_url = get_value(vars, vars_count, (uint8_t*)"favicon-url", NULL);
 
     fprintf(output, "<!DOCTYPE html>\n"
             "<html lang=\"en\">\n"
@@ -932,7 +933,8 @@ begin_html_and_head(FILE* output, KeyValue* vars, size_t vars_count)
     sprintf(favicon, "%s/favicon.ico", basedir);
     if (!access(favicon, R_OK))
         fprintf(output, "<link rel=\"shortcut icon\" type=\"image/x-icon\""
-                " href=\"/favicon.ico\" />\n");
+                " href=\"%s\" />\n", 
+                favicon_url ? (char*)favicon_url : "/favicon.ico");
     free(favicon);
     
     if (site_desc && *site_desc)

@@ -2,6 +2,7 @@
 site-name: slweb - Simple static website generator. 
 site-desc: Simple static website generator
 stylesheet: index.css
+favicon-url: /slweb/favicon.ico
 ---
 {main}
 # slweb

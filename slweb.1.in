@@ -288,6 +288,14 @@ attribute. For example, instead of \fCblog/2020/august.html\fR, the resulting
 permalink will have \fCblog/2020/august\fR. 
 .
 .IP \[bu] 4
+.BR favicon-url .
+if present, this
+.SM URL
+will be used as a favicon
+.SM URL
+instead of the default, \fC/favicon.ico\fR.
+.
+.IP \[bu] 4
 .BR permalink-url .
 If present, this
 .SM URL
