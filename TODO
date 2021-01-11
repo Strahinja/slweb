@@ -1,9 +1,9 @@
                                       TODO
                                       ====
 
-    [ ] Add csv templating directive
+    [~] Add csv templating directive
 
-        [ ] Move fprintf(output...) to a separate function
+        [x] Move fprintf(output...) to a separate function
 
         [ ] Record that function's output rom {csv}..{/csv} into 
             "capture blocks" - no need to do that for all of them,

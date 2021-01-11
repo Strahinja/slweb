@@ -24,7 +24,17 @@ static size_t colno         = 1;
 static char* input_filename = NULL;
 static char* input_dirname  = NULL;
 static char* basedir        = NULL;
-static char* arg_zero       = NULL;
+static KeyValue* vars       = NULL;
+static KeyValue* pvars       = NULL;
+static size_t vars_count    = 0;
+static KeyValue* macros     = NULL;
+static KeyValue* pmacros     = NULL;
+static size_t macros_count  = 0;
+static KeyValue* links      = NULL;
+static KeyValue* plinks      = NULL;
+static size_t links_count   = 0;
+static ULONG state          = ST_NONE;
+
 
 #define CHECKEXITNOMEM(ptr) { if (!ptr) exit(error(ENOMEM, \
                 (uint8_t*)"Memory allocation failed (out of memory?)\n")); }
@@ -78,9 +88,6 @@ warning(int code, uint8_t* fmt, ...)
 
 int
 slweb_parse(uint8_t* buffer, FILE* output, 
-        KeyValue** vars, size_t* vars_count, 
-        KeyValue** macros, size_t* macros_count,
-        KeyValue** links, size_t* links_count,
         BOOL body_only, BOOL read_yaml_macros_and_links);
 
 char*
@@ -167,6 +174,22 @@ strip_ext(const char* fn)
 }
 
 int
+print_output(FILE* output, char* fmt, ...)
+{
+    uint8_t buf[BUFSIZE];
+    va_list args;
+    va_start(args, fmt);
+    if (state & ST_CSV_BODY)
+    {
+        u8_vsnprintf(buf, BUFSIZE, fmt, args);
+    }
+    else
+        vfprintf(output, fmt, args);
+    va_end(args);
+    return 0;
+}
+
+int
 print_command(uint8_t* command, FILE* output)
 {
     FILE* cmd_output = popen((char*)command, "r");
@@ -188,8 +211,7 @@ print_command(uint8_t* command, FILE* output)
         if (eol)
             *eol = '\0';
 
-        fprintf(output, "%s\n", cmd_output_line);
-
+        print_output(output, "%s\n", cmd_output_line);
     }
     free(cmd_output_line);
     pclose(cmd_output);
@@ -237,8 +259,8 @@ process_heading(uint8_t* token, FILE* output, UBYTE heading_level)
     if (!token || u8_strlen(token) < 1)
         warning(1, (uint8_t*)"Empty heading\n");
 
-    fprintf(output, "<h%d>%s</h%d>", heading_level, token ? (char*)token : "",
-            heading_level);
+    print_output(output, "<h%d>%s</h%d>", 
+            heading_level, token ? (char*)token : "", heading_level);
 
     return 0;
 }
@@ -257,7 +279,7 @@ process_git_log(FILE* output)
     else
         strncpy(basename, input_filename, strlen(input_filename));
 
-    fprintf(output, "<div id=\"git-log\">\nPrevious commit:\n");
+    print_output(output, "<div id=\"git-log\">\nPrevious commit:\n");
     uint8_t* command = NULL;
     CALLOC(command, uint8_t, BUFSIZE)
     u8_snprintf(command, BUFSIZE,
@@ -266,10 +288,10 @@ process_git_log(FILE* output)
         basename);
     if (print_command(command, output))
     {
-        fprintf(output, "</div><!--git-log-->\n");
+        print_output(output, "</div><!--git-log-->\n");
         return error(1, (uint8_t*)"git-log: Cannot run git\n");
     }
-    fprintf(output, "</div><!--git-log-->\n");
+    print_output(output, "</div><!--git-log-->\n");
 
     free(command);
     free(basename);
@@ -278,22 +300,22 @@ process_git_log(FILE* output)
 }
 
 int
-process_csv(uint8_t* token, FILE* output, ULONG* state, 
-        BOOL read_yaml_macros_and_links, BOOL end_tag)
+process_csv(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links, 
+        BOOL end_tag)
 {
     if (read_yaml_macros_and_links)
         return 0;
 
     if (end_tag)
     {
-        *state &= ~ST_CSV_BODY;
+        state &= ~ST_CSV_BODY;
         /*
          *fprintf(stderr, "%ld:%ld:csv: /end\n", lineno, colno);
          */
     }
     else
     {
-        *state |= ST_CSV_BODY;
+        state |= ST_CSV_BODY;
         uint8_t* saveptr = NULL;
         uint8_t* args = u8_strtok(token, (uint8_t*)" ", &saveptr);
         args = u8_strtok(NULL, (uint8_t*)" ", &saveptr);
@@ -311,17 +333,10 @@ process_csv(uint8_t* token, FILE* output, ULONG* state,
 }
 
 int
-process_include(uint8_t* token, FILE* output, ULONG* state, 
-        KeyValue** vars, size_t* vars_count,
-        KeyValue** macros, size_t* macros_count,
-        KeyValue** links, size_t* links_count,
-        BOOL read_yaml_macros_and_links)
+process_include(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links)
 {
     if (read_yaml_macros_and_links)
         return 0;
-
-    if (!arg_zero)
-        exit(error(EINVAL, (uint8_t*)"Invalid argument zero\n"));
 
     if (!input_filename)
         return warning(1, (uint8_t*)"Cannot use 'include' in stdin\n");
@@ -354,9 +369,7 @@ process_include(uint8_t* token, FILE* output, ULONG* state,
         if (!strcmp(basedir, "."))
             strncpy(basedir, input_dirname, strlen(input_dirname));
 
-        sprintf(input_filename, "%s/%s.slw",
-                basedir,
-                include_filename);
+        sprintf(input_filename, "%s/%s.slw", basedir, include_filename);
 
         FILE* input = NULL;
         FILE* output = stdout;
@@ -364,19 +377,17 @@ process_include(uint8_t* token, FILE* output, ULONG* state,
 
         read_file_into_buffer(&buffer, input_filename, &input_dirname, &input);
 
-        free(*links);
-        CALLOC(*links, KeyValue, 1)
-        (*links)->key = NULL;
-        (*links)->value = NULL;
-        *links_count = 0;
+        free(links);
+        CALLOC(links, KeyValue, 1)
+        links->key = NULL;
+        links->value = NULL;
+        links_count = 0;
 
         /* First pass: read YAML, macros and links */
-        slweb_parse(buffer, output, vars, vars_count, macros, macros_count,
-                links, links_count, TRUE, TRUE);
+        slweb_parse(buffer, output, TRUE, TRUE);
 
         /* Second pass: parse and output */
-        slweb_parse(buffer, output, vars, vars_count, macros, macros_count, 
-                links, links_count, TRUE, FALSE);
+        slweb_parse(buffer, output, TRUE, FALSE);
 
         exit(0);
     }
@@ -437,15 +448,13 @@ reverse_alphacompare(const struct dirent** a, const struct dirent** b)
 
 int
 process_incdir_subdir(const char* subdirname, FILE* output, BOOL details_open,
-        uint8_t* macro_body, ULONG* state,
-        KeyValue** vars, size_t* vars_count,
-        KeyValue** macros, size_t* macros_count,
-        KeyValue** links, size_t* links_count)
+        uint8_t* macro_body)
 {
-    fprintf(output, "<li>\n<details%s>\n<summary>", details_open ? " open" : "");
+    print_output(output, "<li>\n<details%s>\n<summary>", 
+            details_open ? " open" : "");
     if (macro_body)
         fprintf(stdout, "%s", macro_body);
-    fprintf(output, "%s</summary>\n<div>\n", subdirname);
+    print_output(output, "%s</summary>\n<div>\n", subdirname);
 
     struct dirent** namelist;
     struct dirent** pnamelist;
@@ -486,19 +495,17 @@ process_incdir_subdir(const char* subdirname, FILE* output, BOOL details_open,
             read_file_into_buffer(&buffer, input_filename, &input_dirname, 
                     &input);
 
-            free(*links);
-            CALLOC(*links, KeyValue, 1)
-            (*links)->key = NULL;
-            (*links)->value = NULL;
-            *links_count = 0;
+            free(links);
+            CALLOC(links, KeyValue, 1)
+            links->key = NULL;
+            links->value = NULL;
+            links_count = 0;
 
             /* First pass: read YAML, macros and links */
-            slweb_parse(buffer, output, vars, vars_count, macros, macros_count,
-                    links, links_count, TRUE, TRUE);
+            slweb_parse(buffer, output, TRUE, TRUE);
 
             /* Second pass: parse and output */
-            slweb_parse(buffer, output, vars, vars_count, macros, macros_count, 
-                    links, links_count, TRUE, FALSE);
+            slweb_parse(buffer, output, TRUE, FALSE);
             exit(0);
         }
         else
@@ -510,15 +517,12 @@ process_incdir_subdir(const char* subdirname, FILE* output, BOOL details_open,
 
     free(abs_subdirname);
 
-    fprintf(output, "</div>\n</details>\n</li>\n");
+    print_output(output, "</div>\n</details>\n</li>\n");
     return 0;
 }
 
 int
-process_incdir(uint8_t* token, FILE* output, KeyValue** vars, 
-        size_t* vars_count, KeyValue** macros, size_t* macros_count, 
-        KeyValue** pmacros, KeyValue** links, size_t* links_count, ULONG* state, 
-        BOOL read_yaml_macros_and_links)
+process_incdir(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links)
 {
     if (read_yaml_macros_and_links)
         return 0;
@@ -537,7 +541,7 @@ process_incdir(uint8_t* token, FILE* output, KeyValue** vars,
     if (!arg)
         return warning(1, (uint8_t*)"incdir: Arguments required\n");
     if (*arg == '=')
-        macro_body = get_value(*macros, *macros_count, arg+1, NULL);
+        macro_body = get_value(macros, macros_count, arg+1, NULL);
     else
     {
         uint8_t* parg = arg;
@@ -553,10 +557,10 @@ process_incdir(uint8_t* token, FILE* output, KeyValue** vars,
         arg = u8_strtok(NULL, (uint8_t*)" ", &saveptr);
         if (*arg != '=')
             return warning(1, (uint8_t*)"incdir: Second argument not macro\n");
-        macro_body = get_value(*macros, *macros_count, arg+1, NULL);
+        macro_body = get_value(macros, macros_count, arg+1, NULL);
     }
 
-    fprintf(output, "<ul class=\"incdir\">\n");
+    print_output(output, "<ul class=\"incdir\">\n");
 
     if (scandir(basedir, &namelist, &filter_subdirs,
             &reverse_alphacompare) < 0)
@@ -570,15 +574,14 @@ process_incdir(uint8_t* token, FILE* output, KeyValue** vars,
     while (names_output < num && pnamelist && *pnamelist)
     {
         process_incdir_subdir((*pnamelist)->d_name, output, details_open,
-                macro_body, state,
-                vars, vars_count, macros, macros_count, links, links_count);
+                macro_body);
         details_open = FALSE;
         pnamelist++;
         names_output++;
     }
     free(namelist);
 
-    fprintf(output, "</ul>\n");
+    print_output(output, "</ul>\n");
 
     return 0;
 }
@@ -625,7 +628,8 @@ process_timestamp(FILE* output, const char* link, uint8_t* permalink_macro,
 
                     ptimestamp_format++;
                 }
-                fprintf(output, "<a href=\"%s\" class=\"timestamp\">%s%s</a>\n",
+                print_output(output, "<a href=\"%s\""
+                        " class=\"timestamp\">%s%s</a>\n",
                         link,
                         permalink_macro ? (char*)permalink_macro : "",
                         formatted_date);
@@ -641,15 +645,14 @@ process_timestamp(FILE* output, const char* link, uint8_t* permalink_macro,
 }
 
 int
-process_macro(uint8_t* token, FILE* output, KeyValue** macros, 
-        size_t* macros_count, KeyValue** pmacros, ULONG* state, 
-        BOOL read_yaml_macros_and_links, BOOL end_tag)
+process_macro(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links, 
+        BOOL end_tag)
 {
     if (!end_tag)
     {
         BOOL seen = FALSE;
 
-        uint8_t* macro_body = get_value(*macros, *macros_count, token+1,
+        uint8_t* macro_body = get_value(macros, macros_count, token+1,
                 read_yaml_macros_and_links ? NULL : &seen);
 
         if (macro_body)
@@ -657,42 +660,39 @@ process_macro(uint8_t* token, FILE* output, KeyValue** macros,
             if (!read_yaml_macros_and_links)
             {
                 if (seen)
-                    fprintf(output, "%s", macro_body);
+                    print_output(output, "%s", macro_body);
                 else
-                    *state |= ST_MACRO_BODY;
+                    state |= ST_MACRO_BODY;
             }
         }
         else
         {
             if (read_yaml_macros_and_links)
             {
-                (*macros_count)++;
+                macros_count++;
 
-                if (*macros_count > 1)
+                if (macros_count > 1)
                 {
-                    REALLOC(*macros, KeyValue, 
-                            *macros_count * sizeof(KeyValue))
-                    *pmacros = *macros + *macros_count - 1;
+                    REALLOC(macros, KeyValue, 
+                            macros_count * sizeof(KeyValue))
+                    pmacros = macros + macros_count - 1;
                 }
-                CALLOC((*pmacros)->key, uint8_t, u8_strlen(token+1))
-                (*pmacros)->seen = FALSE;
-                u8_strcpy((*pmacros)->key, token+1);
-                (*pmacros)->value = NULL;
+                CALLOC(pmacros->key, uint8_t, u8_strlen(token+1))
+                pmacros->seen = FALSE;
+                u8_strcpy(pmacros->key, token+1);
+                pmacros->value = NULL;
             }
-            *state |= ST_MACRO_BODY;
+            state |= ST_MACRO_BODY;
         }
     }
     else
-        *state &= ~ST_MACRO_BODY;
+        state &= ~ST_MACRO_BODY;
 
     return 0;
 }
 
 int
-process_tag(uint8_t* token, FILE* output, KeyValue** macros, 
-        size_t* macros_count, KeyValue** pmacros, KeyValue** vars,
-        size_t* vars_count, KeyValue** links, size_t* links_count,
-        ULONG* state, BOOL read_yaml_macros_and_links, 
+process_tag(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links, 
         BOOL* skip_eol, BOOL end_tag)
 {
     if (!token || u8_strlen(token) < 1)
@@ -706,7 +706,7 @@ process_tag(uint8_t* token, FILE* output, KeyValue** macros,
     else if (!strcmp((char*)token, "made-by")
             && !read_yaml_macros_and_links)   /* {made-by} */
     {
-        fprintf(output, "<div id=\"made-by\">\n"
+        print_output(output, "<div id=\"made-by\">\n"
                 "Generated by <a href=\"https://github.com/Strahinja/slweb\">"
                 "slweb</a>\n"
                 "© %s Strahinya Radich.\n"
@@ -715,78 +715,73 @@ process_tag(uint8_t* token, FILE* output, KeyValue** macros,
     }
     else if (startswith((char*)token, "csv"))   /* {csv} */
     {
-        process_csv(token, output, state, read_yaml_macros_and_links, end_tag);
+        process_csv(token, output, read_yaml_macros_and_links, end_tag);
     }
     else if (startswith((char*)token, "include"))  /* {include} */
     {
-        process_include(token, output, state, vars, vars_count,
-                macros, macros_count, links, links_count,
-                read_yaml_macros_and_links);
+        process_include(token, output, read_yaml_macros_and_links);
         *skip_eol = TRUE;
     }
     else if (startswith((char*)token, "incdir"))   /* {incdir} */
     {
-        process_incdir(token, output, vars, vars_count, macros, macros_count,
-                pmacros, links, links_count, state,
-                read_yaml_macros_and_links);
+        process_incdir(token, output, read_yaml_macros_and_links);
         *skip_eol = TRUE;
     }
     else if (*token == '=')   /* {=macro} */
     {
-        process_macro(token, output, macros, macros_count, pmacros, state,
-                read_yaml_macros_and_links, end_tag);
+        process_macro(token, output, read_yaml_macros_and_links, end_tag);
         *skip_eol = TRUE;
     }
     else if (!read_yaml_macros_and_links)   /* general tags */
     {
-        fprintf(output, "<");
+        print_output(output, "<");
         if (end_tag)
-            fprintf(output, "/");
+            print_output(output, "/");
 
         if (*token == '.' || *token == '#')
         {
-            fprintf(output, "div");
+            print_output(output, "div");
         }
 
         while (*token && *token != '#' && *token != '.')
-            fprintf(output, "%c", *token++);
+            print_output(output, "%c", *token++);
 
         if (!end_tag)
         {
             if (*token == '#')
             {
                 token++;
-                fprintf(output, " id=\"");
+                print_output(output, " id=\"");
                 while (*token && *token != '.')
-                    fprintf(output, "%c", *token++);
-                fprintf(output, "\"");
+                    print_output(output, "%c", *token++);
+                print_output(output, "\"");
                 if (*token == '.')
                 {
                     token++;
-                    fprintf(output, " class=\"");
+                    print_output(output, " class=\"");
                     while (*token)
-                        fprintf(output, "%c", *token++);
-                    fprintf(output, "\"");
+                        print_output(output, "%c", *token++);
+                    print_output(output, "\"");
                 }
             }
             else if (*token == '.')
             {
                 token++;
-                fprintf(output, " class=\"");
+                print_output(output, " class=\"");
                 while (*token && *token != '#')
-                    fprintf(output, "%c", *token++);
-                fprintf(output, "\"");
+                    print_output(output, "%c", *token++);
+                print_output(output, "\"");
                 if (*token == '#')
                 {
                     token++;
-                    fprintf(output, " id=\"");
+                    print_output(output, " id=\"");
                     while (*token)
-                        fprintf(output, "%c", *token++);
-                    fprintf(output, "\"");
+                        print_output(output, "%c", *token++);
+                    print_output(output, "\"");
                 }
             }
         }
-        fprintf(output, ">");
+        print_output(output, ">");
     }
 
     return 0;
@@ -795,28 +790,28 @@ process_tag(uint8_t* token, FILE* output, KeyValue** macros,
 int
 process_bold(FILE* output, BOOL end_tag)
 {
-    fprintf(output, "<%sstrong>", end_tag ? "/" : "");
+    print_output(output, "<%sstrong>", end_tag ? "/" : "");
     return 0;
 }
 
 int
 process_italic(FILE* output, BOOL end_tag)
 {
-    fprintf(output, "<%sem>", end_tag ? "/" : "");
+    print_output(output, "<%sem>", end_tag ? "/" : "");
     return 0;
 }
 
 int
 process_code(FILE* output, BOOL end_tag)
 {
-    fprintf(output, "<%scode>", end_tag ? "/" : "");
+    print_output(output, "<%scode>", end_tag ? "/" : "");
     return 0;
 }
 
 int
 process_blockquote(FILE* output, BOOL end_tag)
 {
-    fprintf(output, "<%sblockquote>", end_tag ? "/" : "");
+    print_output(output, "<%sblockquote>", end_tag ? "/" : "");
     return 0;
 }
 
@@ -872,7 +867,7 @@ int
 process_inline_link(uint8_t* link_text, uint8_t* link_macro_body, 
         uint8_t* link_url, FILE* output)
 {
-    fprintf(output, "<a href=\"%s\">%s%s</a>", 
+    print_output(output, "<a href=\"%s\">%s%s</a>", 
             link_url ? (char*)link_url : "", 
             link_macro_body ? (char*)link_macro_body : "",
             link_text);
@@ -882,7 +877,7 @@ process_inline_link(uint8_t* link_text, uint8_t* link_macro_body,
 
 int
 process_link(uint8_t* link_text, uint8_t* link_macro_body, uint8_t* link_id, 
-        KeyValue* links, size_t links_count, FILE* output)
+        FILE* output)
 {
     uint8_t* url = get_value(links, links_count, link_id, NULL);
     return process_inline_link(link_text, link_macro_body,
@@ -892,7 +887,7 @@ process_link(uint8_t* link_text, uint8_t* link_macro_body, uint8_t* link_id,
 int
 process_inline_image(uint8_t* image_text, uint8_t* image_url, FILE* output)
 {
-    fprintf(output, "<img src=\"%s\" alt=\"%s\" />",
+    print_output(output, "<img src=\"%s\" alt=\"%s\" />",
             image_url ? (char*)image_url : "", 
             image_text);
 
@@ -900,15 +895,14 @@ process_inline_image(uint8_t* image_text, uint8_t* image_url, FILE* output)
 }
 
 int
-process_image(uint8_t* image_text, uint8_t* image_id, KeyValue* links, 
-        size_t links_count, FILE* output)
+process_image(uint8_t* image_text, uint8_t* image_id, FILE* output)
 {
     uint8_t* url = get_value(links, links_count, image_id, NULL);
     return process_inline_image(image_text, url, output);
 }
 
 int
-process_line_start(ULONG* state, BOOL first_line_in_doc,
+process_line_start(BOOL first_line_in_doc,
         BOOL previous_line_blank, BOOL processed_start_of_line,
         BOOL read_yaml_macros_and_links, FILE* output,
         uint8_t** token,
@@ -916,18 +910,17 @@ process_line_start(ULONG* state, BOOL first_line_in_doc,
 {
     if ((first_line_in_doc || previous_line_blank)
             && !processed_start_of_line
-            && !(*state & (ST_PRE | ST_BLOCKQUOTE)))
+            && !(state & (ST_PRE | ST_BLOCKQUOTE)))
     {
         if (!read_yaml_macros_and_links)
-            fprintf(output, "<p>");
-        *state |= ST_PARA_OPEN;
+            print_output(output, "<p>");
+        state |= ST_PARA_OPEN;
     }
     return 0;
 }
 
 int
-process_text_token(ULONG* state, 
-        BOOL first_line_in_doc,
+process_text_token(BOOL first_line_in_doc,
         BOOL previous_line_blank,
         BOOL processed_start_of_line,
         BOOL read_yaml_macros_and_links,
@@ -936,15 +929,15 @@ process_text_token(ULONG* state,
         uint8_t** ptoken,
         BOOL add_enclosing_paragraph)
 {
-    if (!read_yaml_macros_and_links && !(*state & ST_YAML))
+    if (!read_yaml_macros_and_links && !(state & ST_YAML))
     {
         if (add_enclosing_paragraph)
-            process_line_start(state, first_line_in_doc, previous_line_blank,
+            process_line_start(first_line_in_doc, previous_line_blank,
                     processed_start_of_line, read_yaml_macros_and_links,
                     output, token, ptoken);
         **ptoken = '\0';
-        if (**token && !(*state & ST_MACRO_BODY))
-            fprintf(output, "%s", *token);
+        if (**token && !(state & ST_MACRO_BODY))
+            print_output(output, "%s", *token);
     }
     **token = '\0';
     *ptoken = *token;
@@ -952,13 +945,13 @@ process_text_token(ULONG* state,
 }
 
 int
-begin_html_and_head(FILE* output, KeyValue* vars, size_t vars_count)
+begin_html_and_head(FILE* output)
 {
     uint8_t* site_name = get_value(vars, vars_count, (uint8_t*)"site-name", NULL);
     uint8_t* site_desc = get_value(vars, vars_count, (uint8_t*)"site-desc", NULL);
     uint8_t* favicon_url = get_value(vars, vars_count, (uint8_t*)"favicon-url", NULL);
 
-    fprintf(output, "<!DOCTYPE html>\n"
+    print_output(output, "<!DOCTYPE html>\n"
             "<html lang=\"en\">\n"
             "<head>\n"
             "<title>%s</title>\n"
@@ -969,28 +962,28 @@ begin_html_and_head(FILE* output, KeyValue* vars, size_t vars_count)
     CALLOC(favicon, char, BUFSIZE)
     sprintf(favicon, "%s/favicon.ico", basedir);
     if (!access(favicon, R_OK))
-        fprintf(output, "<link rel=\"shortcut icon\" type=\"image/x-icon\""
+        print_output(output, "<link rel=\"shortcut icon\" type=\"image/x-icon\""
                 " href=\"%s\" />\n", 
                 favicon_url ? (char*)favicon_url : "/favicon.ico");
     free(favicon);
     
     if (site_desc && *site_desc)
-        fprintf(output, "<meta name=\"description\" content=\"%s\" />\n",
+        print_output(output, "<meta name=\"description\" content=\"%s\" />\n",
                 (char*)site_desc);
 
-    fprintf(output, "<meta name=\"viewport\" content=\"width=device-width,"
+    print_output(output, "<meta name=\"viewport\" content=\"width=device-width,"
             " initial-scale=1\" />\n<meta name=\"generator\" content=\"slweb\" />\n");
     return 0;
 }
 
 int
-add_css(FILE* output, KeyValue* vars, size_t vars_count)
+add_css(FILE* output)
 {
     KeyValue* pvars = vars;
     while (pvars < vars + vars_count)
     {
         if (!u8_strcmp(pvars->key, (uint8_t*)"stylesheet"))
-            fprintf(output, "<link rel=\"stylesheet\" href=\"%s\" />\n",
+            print_output(output, "<link rel=\"stylesheet\" href=\"%s\" />\n",
                     pvars->value);
         pvars++;
     }
@@ -998,9 +991,9 @@ add_css(FILE* output, KeyValue* vars, size_t vars_count)
 }
 
 int
-end_head_start_body(FILE* output, KeyValue* vars, size_t vars_count)
+end_head_start_body(FILE* output)
 {
-    fprintf(output, "</head>\n<body>\n");
+    print_output(output, "</head>\n<body>\n");
 
     return 0;
 }
@@ -1008,15 +1001,12 @@ end_head_start_body(FILE* output, KeyValue* vars, size_t vars_count)
 int
 end_body_and_html(FILE* output)
 {
-    fprintf(output, "</body>\n</html>\n");
+    print_output(output, "</body>\n</html>\n");
     return 0;
 }
 
 int
 slweb_parse(uint8_t* buffer, FILE* output, 
-        KeyValue** vars, size_t* vars_count, 
-        KeyValue** macros, size_t* macros_count,
-        KeyValue** links, size_t* links_count,
         BOOL body_only, BOOL read_yaml_macros_and_links)
 {
     uint8_t* title                     = NULL;
@@ -1032,10 +1022,6 @@ slweb_parse(uint8_t* buffer, FILE* output,
     uint8_t* ptoken                    = NULL;
     uint8_t* link_text                 = NULL;
     uint8_t* link_macro                = NULL;
-    KeyValue* pvars                    = NULL;
-    KeyValue* plinks                   = NULL;
-    KeyValue* pmacros                  = NULL;
-    ULONG state                        = ST_NONE;
     UBYTE heading_level                = 0;
     BOOL end_tag                       = FALSE;
     BOOL first_line_in_doc             = TRUE;
@@ -1047,41 +1033,41 @@ slweb_parse(uint8_t* buffer, FILE* output,
     if (!buffer)
         exit(error(1, (uint8_t*)"Empty buffer\n"));
 
-    if (!vars || !*vars)
+    if (!vars)
         exit(error(EINVAL, (uint8_t*)"Invalid argument (vars)\n"));
 
-    if (!links || !*links)
+    if (!links)
         exit(error(EINVAL, (uint8_t*)"Invalid argument (links)\n"));
 
-    if (!macros || !*macros)
+    if (!macros)
         exit(error(EINVAL, (uint8_t*)"Invalid argument (macros)\n"));
 
-    title = get_value(*vars, *vars_count, (uint8_t*)"title", NULL);
-    title_heading_level = get_value(*vars, *vars_count,
+    title = get_value(vars, vars_count, (uint8_t*)"title", NULL);
+    title_heading_level = get_value(vars, vars_count,
             (uint8_t*)"title-heading-level", NULL);
-    date = get_value(*vars, *vars_count, (uint8_t*)"date", NULL);
-    permalink_url = get_value(*vars, *vars_count, (uint8_t*)"permalink-url", NULL);
-    ext_in_permalink = get_value(*vars, *vars_count, (uint8_t*)"ext-in-permalink", NULL);
+    date = get_value(vars, vars_count, (uint8_t*)"date", NULL);
+    permalink_url = get_value(vars, vars_count, (uint8_t*)"permalink-url", NULL);
+    ext_in_permalink = get_value(vars, vars_count, (uint8_t*)"ext-in-permalink", NULL);
 
     CALLOC(line, uint8_t, BUFSIZE)
     CALLOC(token, uint8_t, BUFSIZE)
     CALLOC(link_macro, uint8_t, BUFSIZE)
 
     pbuffer = buffer;
-    pvars = *vars;
-    plinks = *links;
-    pmacros = *macros;
+    pvars = vars;
+    plinks = links;
+    pmacros = macros;
     lineno = 0;
 
     if (!read_yaml_macros_and_links && !body_only)
     {
-        begin_html_and_head(output, *vars, *vars_count);
-        add_css(output, *vars, *vars_count);
-        end_head_start_body(output, *vars, *vars_count);
+        begin_html_and_head(output);
+        add_css(output);
+        end_head_start_body(output);
     }
 
     if (title)
-        fprintf(output, "<h%s>%s</h%s>\n", 
+        print_output(output, "<h%s>%s</h%s>\n", 
                 title_heading_level ? (char*)title_heading_level : "2", 
                 (char*)title, 
                 title_heading_level ? (char*)title_heading_level : "2");
@@ -1089,10 +1075,10 @@ slweb_parse(uint8_t* buffer, FILE* output,
     if (date && input_filename)
     {
         char* link = strip_ext(input_filename);
-        uint8_t* samedir_permalink = get_value(*vars, *vars_count, 
+        uint8_t* samedir_permalink = get_value(vars, vars_count, 
                 (uint8_t*)"samedir-permalink", NULL);
         char* real_link = NULL;
-        uint8_t* permalink_macro = get_value(*macros, *macros_count,
+        uint8_t* permalink_macro = get_value(macros, macros_count,
                 (uint8_t*)"permalink", NULL);
         CALLOC(real_link, char, BUFSIZE)
 
@@ -1100,7 +1086,8 @@ slweb_parse(uint8_t* buffer, FILE* output,
             strncat(link, timestamp_output_ext, strlen(timestamp_output_ext));
 
         if (permalink_url)
-            process_timestamp(output, (char*)permalink_url, permalink_macro, date);
+            process_timestamp(output, (char*)permalink_url, permalink_macro,
+                    date);
         else if (samedir_permalink && !u8_strcmp(samedir_permalink, (uint8_t*)"1"))
         {
             get_realpath(&real_link, input_dirname, link);
@@ -1166,13 +1153,13 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 {
                     *ptoken = '\0';
 
-                    (*vars_count)++;
+                    vars_count++;
 
-                    if (*vars_count > 1)
+                    if (vars_count > 1)
                     {
-                        REALLOC(*vars, KeyValue,
-                                *vars_count * sizeof(KeyValue))
-                        pvars = *vars + *vars_count - 1;
+                        REALLOC(vars, KeyValue,
+                                vars_count * sizeof(KeyValue))
+                        pvars = vars + vars_count - 1;
                     }
                     CALLOC(pvars->key, uint8_t, u8_strlen(token)+1)
                     u8_strcpy(pvars->key, token);
@@ -1213,9 +1200,9 @@ slweb_parse(uint8_t* buffer, FILE* output,
                     if (!read_yaml_macros_and_links)
                     {
                         if (state & ST_PRE)
-                            fprintf(output, "<pre>");
+                            print_output(output, "<pre>");
                         else
-                            fprintf(output, "</pre>");
+                            print_output(output, "</pre>");
                     }
 
                     pline += 3;
@@ -1244,7 +1231,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                     else
                     {
                         /* Output existing text up to ` */
-                        process_text_token(&state, first_line_in_doc,
+                        process_text_token(first_line_in_doc,
                                 previous_line_blank,
                                 processed_start_of_line,
                                 read_yaml_macros_and_links,
@@ -1334,7 +1321,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                     else
                     {
                         /* Output existing text up to __ */
-                        process_text_token(&state, first_line_in_doc,
+                        process_text_token(first_line_in_doc,
                                 previous_line_blank,
                                 processed_start_of_line,
                                 read_yaml_macros_and_links,
@@ -1376,7 +1363,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                     else
                     {
                         /* Output existing text up to _ */
-                        process_text_token(&state, first_line_in_doc,
+                        process_text_token(first_line_in_doc,
                                 previous_line_blank,
                                 processed_start_of_line,
                                 read_yaml_macros_and_links,
@@ -1430,7 +1417,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                     else
                     {
                         /* Output existing text up to * */
-                        process_text_token(&state, first_line_in_doc,
+                        process_text_token(first_line_in_doc,
                                 previous_line_blank,
                                 processed_start_of_line,
                                 read_yaml_macros_and_links,
@@ -1472,7 +1459,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                     else
                     {
                         /* Output existing text up to * */
-                        process_text_token(&state, first_line_in_doc,
+                        process_text_token(first_line_in_doc,
                                 previous_line_blank,
                                 processed_start_of_line,
                                 read_yaml_macros_and_links,
@@ -1564,7 +1551,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 else
                 {
                     /* Output existing text up to { */
-                    process_text_token(&state, first_line_in_doc,
+                    process_text_token(first_line_in_doc,
                             previous_line_blank,
                             processed_start_of_line,
                             read_yaml_macros_and_links,
@@ -1611,9 +1598,8 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 state &= ~ST_TAG;
                 *ptoken = '\0';
 
-                process_tag(token, output, macros, macros_count,
-                        &pmacros, vars, vars_count, links, links_count,
-                        &state, read_yaml_macros_and_links, &skip_eol, end_tag);
+                process_tag(token, output, read_yaml_macros_and_links,
+                        &skip_eol, end_tag);
 
                 *token = '\0';
                 ptoken = token;
@@ -1663,7 +1649,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 /* Output existing text up to ! */
                 *ptoken = '\0';
                 if (!read_yaml_macros_and_links)
-                    fprintf(output, "%s", token);
+                    print_output(output, "%s", token);
                 *token = '\0';
                 ptoken = token;
 
@@ -1713,7 +1699,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
 
                 if (*token)
                     /* Output existing text up to [ */
-                    process_text_token(&state, first_line_in_doc,
+                    process_text_token(first_line_in_doc,
                             previous_line_blank,
                             processed_start_of_line,
                             read_yaml_macros_and_links,
@@ -1787,7 +1773,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                     {
                         if (state & ST_LINK_SECOND_ARG)
                             process_inline_link(link_text, 
-                                    get_value(*macros, *macros_count, 
+                                    get_value(macros, macros_count, 
                                         link_macro, NULL), 
                                     token, output);
                         else
@@ -1817,9 +1803,9 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 {
                     if (!read_yaml_macros_and_links)
                         process_link(link_text, 
-                                get_value(*macros, *macros_count, 
+                                get_value(macros, macros_count, 
                                     link_macro, NULL), 
-                                token, *links, *links_count, output);
+                                token, output);
                     *token = '\0';
                     ptoken = token;
                     state &= ~(ST_LINK | ST_LINK_SECOND_ARG);
@@ -1829,8 +1815,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 else if (state & ST_IMAGE_SECOND_ARG)
                 {
                     if (!read_yaml_macros_and_links)
-                        process_image(link_text, token, *links, *links_count, 
-                                output);
+                        process_image(link_text, token, output);
                     *token = '\0';
                     ptoken = token;
                     state &= ~(ST_IMAGE | ST_IMAGE_SECOND_ARG);
@@ -1842,13 +1827,13 @@ slweb_parse(uint8_t* buffer, FILE* output,
                     switch (*(pline+1))
                     {
                         case ':':
-                            (*links_count)++;
+                            links_count++;
 
-                            if (*links_count > 1)
+                            if (links_count > 1)
                             {
-                                REALLOC(*links, KeyValue,
-                                        *links_count * sizeof(KeyValue))
-                                plinks = *links + *links_count - 1;
+                                REALLOC(links, KeyValue,
+                                        links_count * sizeof(KeyValue))
+                                plinks = links + links_count - 1;
                             }
                             CALLOC(plinks->key, uint8_t, u8_strlen(token)+1)
                             u8_strcpy(plinks->key, token);
@@ -1925,9 +1910,9 @@ slweb_parse(uint8_t* buffer, FILE* output,
         {
             if (*token)
             {
+                *ptoken = '\0';
                 if (state & ST_MACRO_BODY)
                 {
-                    *ptoken = '\0';
                     size_t token_len = u8_strlen(token);
 
                     skip_eol = TRUE;
@@ -1956,7 +1941,6 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 }
                 else if (state & ST_LINK_SECOND_ARG)
                 {
-                    *ptoken = '\0';
                     if (read_yaml_macros_and_links)
                     {
                         CALLOC(plinks->value, uint8_t, u8_strlen(token)+1)
@@ -1966,7 +1950,6 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 else if (state & ST_HEADING)
                 {
                     state &= ~ST_HEADING;
-                    *ptoken = '\0';
                     if (!read_yaml_macros_and_links)
                         process_heading(token, output, heading_level);
                     first_line_in_doc = FALSE;
@@ -1975,7 +1958,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                     heading_level = 0;
                 }
                 else 
-                    process_text_token(&state, first_line_in_doc,
+                    process_text_token(first_line_in_doc,
                             previous_line_blank,
                             processed_start_of_line,
                             read_yaml_macros_and_links,
@@ -1990,7 +1973,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                         && (!*pbuffer || *pbuffer == '\n'))
             {
                 if (!read_yaml_macros_and_links)
-                    fprintf(output, "</p>");
+                    print_output(output, "</p>");
                 state &= ~ST_PARA_OPEN;
             }
 
@@ -2007,7 +1990,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
         if (!skip_eol && !read_yaml_macros_and_links 
                 && !(state & (ST_YAML | ST_YAML_VAL 
                         | ST_LINK_SECOND_ARG)))
-                fprintf(output, "\n");
+                print_output(output, "\n");
 
         *token = '\0';
         ptoken = token;
@@ -2043,8 +2026,6 @@ main(int argc, char** argv)
 
     CALLOC(basedir, char, 2)
     *basedir = '.';
-
-    arg_zero = *argv;
 
     while ((arg = *++argv))
     {
@@ -2157,13 +2138,6 @@ main(int argc, char** argv)
         free(bufline);
     }
 
-    KeyValue* vars = NULL;
-    size_t vars_count = 0;
-    KeyValue* macros = NULL;
-    size_t macros_count = 0;
-    KeyValue* links = NULL;
-    size_t links_count = 0;
-
     CALLOC(vars, KeyValue, 1)
     vars->key = NULL;
     vars->value = NULL;
@@ -2177,13 +2151,9 @@ main(int argc, char** argv)
     links->value = NULL;
 
     /* First pass: read YAML, macros and links */
-    slweb_parse(buffer, output, &vars, &vars_count, &macros, &macros_count,
-            &links, &links_count,
-            body_only, TRUE);
+    slweb_parse(buffer, output, body_only, TRUE);
 
     /* Second pass: parse and output */
-    return slweb_parse(buffer, output, &vars, &vars_count, 
-            &macros, &macros_count, &links, &links_count,
-            body_only, FALSE);
+    return slweb_parse(buffer, output, body_only, FALSE);
 }
  
