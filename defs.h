@@ -94,6 +94,7 @@ const ULONG ST_LINK_MACRO       = 1 << 13;
 const ULONG ST_IMAGE            = 1 << 14;
 const ULONG ST_IMAGE_SECOND_ARG = 1 << 15;
 const ULONG ST_MACRO_BODY       = 1 << 16;
+const ULONG ST_CSV_BODY         = 1 << 17;
 #pragma GCC diagnostic pop
 
 #endif /* __DEFS_H */

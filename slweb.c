@@ -278,6 +278,39 @@ process_git_log(FILE* output)
 }
 
 int
+process_csv(uint8_t* token, FILE* output, ULONG* state, 
+        BOOL read_yaml_macros_and_links, BOOL end_tag)
+{
+    if (read_yaml_macros_and_links)
+        return 0;
+
+    if (end_tag)
+    {
+        *state &= ~ST_CSV_BODY;
+        /*
+         *fprintf(stderr, "%ld:%ld:csv: /end\n", lineno, colno);
+         */
+    }
+    else
+    {
+        *state |= ST_CSV_BODY;
+        uint8_t* saveptr = NULL;
+        uint8_t* args = u8_strtok(token, (uint8_t*)" ", &saveptr);
+        args = u8_strtok(NULL, (uint8_t*)" ", &saveptr);
+        /*
+         *if (args)
+         *{
+         *    fprintf(stderr, "%ld:%ld:csv: args=[%s]\n", 
+         *            lineno, colno,
+         *            args);
+         *}
+         */
+    }
+
+    return 0;
+}
+
+int
 process_include(uint8_t* token, FILE* output, ULONG* state, 
         KeyValue** vars, size_t* vars_count,
         KeyValue** macros, size_t* macros_count,
@@ -679,6 +712,10 @@ process_tag(uint8_t* token, FILE* output, KeyValue** macros,
                 "© %s Strahinya Radich.\n"
                 "</div><!--made-by-->\n",
                 COPYRIGHTYEAR);
+    }
+    else if (startswith((char*)token, "csv"))   /* {csv} */
+    {
+        process_csv(token, output, state, read_yaml_macros_and_links, end_tag);
     }
     else if (startswith((char*)token, "include"))  /* {include} */
     {

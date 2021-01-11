@@ -88,9 +88,10 @@ Print program version and exit.
 .LP
 Files processed by
 .B slweb
-are using a minimal subset of Markdown with added directives.  Supported 
-.B "Markdown features"
-are:
+are using a minimal subset of Markdown with added directives.  
+.
+.SS Supported Markdown features
+.
 .IP \[bu] 4
 .BR Paragraphs .
 Text surrounded by newlines will be put inside \fC<p></p>\fR tags.
@@ -122,7 +123,7 @@ Multiple lines are supported.
 .BR Links .
 The construct \fC[A link](https://example.com)\fR will be converted into \fC<a
 href="https://example.com">A link</a>\fR.
-
+.IP
 Special case is the form \fC[=somemacro Link title](https://anything)\fR which
 prepends the body of a macro
 .I somemacro
@@ -132,21 +133,24 @@ into the \fC<a></a>\fR tag (here broken into multiple lines for clarity):
 <!-- contents of somemacro -->
 Link title</a>
 .CDE
+.IP
 This can, for example, be used to add
 .SM SVG
 icons to links. See
 .BR Macros .
-
+.IP
 Also, the form \fC[(Link title)](http://asite.com)\fR will surround the link
 title (text between \fC<a></a>\fR tags) with \fC<span></span>\fR, like so:
 .CDS 4
 <a href="http://asite.com"><span>Link title</span></a>
 .CDE
+.IP
 This allows for separate styling of link text. It can be combined with the
 macro-form:
 .CDS 4
 [=somemacro (Link title)](http://asite.com)
 .CDE
+.IP
 It will prepend the body of a macro
 .I somemacro
 outside of the \fC<span></span>\fR:
@@ -160,8 +164,7 @@ outside of the \fC<span></span>\fR:
 .BR "Line breaks" .
 Two spaces followed by a newline will become \fC<br />\fR.
 .
-.PP
-.BR "Directives " include:
+.SS Directives
 .
 .IP \[bu] 4
 .BR "General tags" .
@@ -275,13 +278,7 @@ containing the \[lq]watermark\[rq] text and a link to the
 .B slweb
 home page.
 .
-.PP
-.B Special 
-.SM \fBYAML
-.B variables
-recognized by
-.B slweb 
-are:
+.SS Special YAML variables
 .
 .IP \[bu] 4
 .BR date .
@@ -372,11 +369,7 @@ to 2.  (\fCtitle: Some title\fR  becomes  \fC<h2>Some title</h2>\fR).
 See
 .BR title .
 .
-.PP
-.B Special macros
-recognized by
-.B slweb
-are:
+.SS Special macros
 .
 .IP \[bu] 4
 .BR permalink .
