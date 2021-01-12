@@ -19,21 +19,23 @@
 
 #include "defs.h"
 
-static size_t lineno        = 0;
-static size_t colno         = 1;
-static char* input_filename = NULL;
-static char* input_dirname  = NULL;
-static char* basedir        = NULL;
-static KeyValue* vars       = NULL;
-static KeyValue* pvars       = NULL;
-static size_t vars_count    = 0;
-static KeyValue* macros     = NULL;
-static KeyValue* pmacros     = NULL;
-static size_t macros_count  = 0;
-static KeyValue* links      = NULL;
-static KeyValue* plinks      = NULL;
-static size_t links_count   = 0;
-static ULONG state          = ST_NONE;
+static size_t lineno           = 0;
+static size_t colno            = 1;
+static char* input_filename    = NULL;
+static char* input_dirname     = NULL;
+static char* basedir           = NULL;
+static KeyValue* vars          = NULL;
+static KeyValue* pvars         = NULL;
+static size_t vars_count       = 0;
+static KeyValue* macros        = NULL;
+static KeyValue* pmacros       = NULL;
+static size_t macros_count     = 0;
+static KeyValue* links         = NULL;
+static KeyValue* plinks        = NULL;
+static size_t links_count      = 0;
+static uint8_t* csv_template   = NULL;
+static size_t csv_template_len = 0;
+static ULONG state             = ST_NONE;
 
 
 #define CHECKEXITNOMEM(ptr) { if (!ptr) exit(error(ENOMEM, \
@@ -43,7 +45,7 @@ static ULONG state          = ST_NONE;
     ptr = calloc(nmemb, sizeof(ptrtype)); \
     CHECKEXITNOMEM(ptr) }
 
-#define REALLOC(ptr, ptrtype, newsize) { \
+#define REALLOC(ptr, newsize) { \
     ptr = realloc(ptr, newsize); \
     CHECKEXITNOMEM(ptr) }
 
@@ -181,7 +183,23 @@ print_output(FILE* output, char* fmt, ...)
     va_start(args, fmt);
     if (state & ST_CSV_BODY)
     {
-        u8_vsnprintf(buf, BUFSIZE, fmt, args);
+        size_t buf_len = 0;
+        vsnprintf((char*)buf, BUFSIZE, fmt, args);
+        buf_len = u8_strlen(buf);
+        if (!csv_template)
+        {
+            CALLOC(csv_template, uint8_t, BUFSIZE)
+            u8_strncpy(csv_template, buf, buf_len);
+            csv_template_len = buf_len;
+        }
+        else
+        {
+            if (csv_template_len + buf_len > sizeof(csv_template))
+                REALLOC(csv_template, sizeof(csv_template) 
+                        + BUFSIZE * sizeof(uint8_t))
+            u8_strncat(csv_template, buf, buf_len);
+            csv_template_len = u8_strlen(csv_template);
+        }
     }
     else
         vfprintf(output, fmt, args);
@@ -311,10 +329,18 @@ process_csv(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links,
         state &= ~ST_CSV_BODY;
         /*
          *fprintf(stderr, "%ld:%ld:csv: /end\n", lineno, colno);
+         *fprintf(stderr, "csv_template = {%s}\n", csv_template);
          */
+
+        free(csv_template);
+        csv_template = NULL;
+        csv_template_len = 0;
     }
     else
     {
+        if (state & ST_CSV_BODY)
+            exit(error(1, (uint8_t*)"Can't nest csv directives\n"));
+
         state |= ST_CSV_BODY;
         uint8_t* saveptr = NULL;
         uint8_t* args = u8_strtok(token, (uint8_t*)" ", &saveptr);
@@ -650,8 +676,10 @@ process_macro(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links,
 {
     if (!end_tag)
     {
-        BOOL seen = FALSE;
+        if (state & ST_MACRO_BODY)
+            exit(error(1, (uint8_t*)"Can't nest macros\n"));
 
+        BOOL seen = FALSE;
         uint8_t* macro_body = get_value(macros, macros_count, token+1,
                 read_yaml_macros_and_links ? NULL : &seen);
 
@@ -673,8 +701,7 @@ process_macro(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links,
 
                 if (macros_count > 1)
                 {
-                    REALLOC(macros, KeyValue, 
-                            macros_count * sizeof(KeyValue))
+                    REALLOC(macros, macros_count * sizeof(KeyValue))
                     pmacros = macros + macros_count - 1;
                 }
                 CALLOC(pmacros->key, uint8_t, u8_strlen(token+1))
@@ -1157,8 +1184,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
 
                     if (vars_count > 1)
                     {
-                        REALLOC(vars, KeyValue,
-                                vars_count * sizeof(KeyValue))
+                        REALLOC(vars, vars_count * sizeof(KeyValue))
                         pvars = vars + vars_count - 1;
                     }
                     CALLOC(pvars->key, uint8_t, u8_strlen(token)+1)
@@ -1535,8 +1561,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
 
                             if (sizeof(pmacros->value) < value_len + token_len + 1)
                             {
-                                REALLOC(pmacros->value, uint8_t,
-                                        sizeof(pmacros->value) 
+                                REALLOC(pmacros->value, sizeof(pmacros->value) 
                                         + BUFSIZE * sizeof(uint8_t))
                             }
                             u8_strncat(pmacros->value, token, token_len);
@@ -1831,8 +1856,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
 
                             if (links_count > 1)
                             {
-                                REALLOC(links, KeyValue,
-                                        links_count * sizeof(KeyValue))
+                                REALLOC(links, links_count * sizeof(KeyValue))
                                 plinks = links + links_count - 1;
                             }
                             CALLOC(plinks->key, uint8_t, u8_strlen(token)+1)
@@ -1856,8 +1880,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                             {
                                 size_t token_len = u8_strlen(token);
                                 if (token_len > u8_strlen(link_text))
-                                    REALLOC(link_text, uint8_t, 
-                                            token_len * sizeof(uint8_t))
+                                    REALLOC(link_text, token_len * sizeof(uint8_t))
                             }
                             else
                                 CALLOC(link_text, uint8_t, u8_strlen(token)+1)
@@ -1924,8 +1947,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
 
                             if (sizeof(pmacros->value) < value_len + token_len + 1)
                             {
-                                REALLOC(pmacros->value, uint8_t,
-                                        sizeof(pmacros->value) 
+                                REALLOC(pmacros->value, sizeof(pmacros->value) 
                                         + BUFSIZE * sizeof(uint8_t))
                             }
                             u8_strncat(pmacros->value, token, token_len);
@@ -2131,7 +2153,7 @@ main(int argc, char** argv)
                 *(eol+1) = '\0';
             bufline_len = u8_strlen(bufline);
             if (buffer_len + bufline_len + 1 > sizeof(buffer))
-                REALLOC(buffer, uint8_t, sizeof(buffer) + BUFSIZE)
+                REALLOC(buffer, sizeof(buffer) + BUFSIZE)
             u8_strncat(buffer, bufline, bufline_len);
             buffer_len += bufline_len;
         }

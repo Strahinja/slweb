@@ -34,7 +34,7 @@ slweb \- Simple static website generator
 .YS
 .
 .SH COPYRIGHT
-slweb Copyright \(co 2020 Strahinya Radich.
+slweb Copyright \(co 2020, 2021 Strahinya Radich.
 .br
 This program is licensed under GNU GPL v3 or later. See the file
 .I LICENSE
@@ -53,8 +53,8 @@ custom Markdown-like syntax into
 .TQ
 .B \-\-body\-only
 .br
-Only add the contents of the \fC<body>\fR tag, skipping \fC<html>\fR and
-\fC<head>\fR.
+Only add the contents of the \fC<body>\fP tag, skipping \fC<html>\fP and
+\fC<head>\fP.
 .
 .TP
 .BI \-d " directory"
@@ -94,40 +94,40 @@ are using a minimal subset of Markdown with added directives.
 .
 .IP \[bu] 4
 .BR Paragraphs .
-Text surrounded by newlines will be put inside \fC<p></p>\fR tags.
+Text surrounded by newlines will be put inside \fC<p></p>\fP tags.
 .
 .IP \[bu]
 .BR Headings .
-A line starting with \fC#\fR followed by space will be put inside
-\fC<h?></h?>\fR, where \fC?\fR stands for 1-4, depending on the number of
+A line starting with \fC#\fP followed by space will be put inside
+\fC<h?></h?>\fP, where \fC?\fP stands for 1-4, depending on the number of
 hash signs.
 .
 .IP \[bu]
 .BR Bold/italic .
-Text inside \fC*asterisks*\fR or \fC_underlines_\fR will be put inside
-\fC<em></em>\fR. Text inside \fC**double asterisks**\fR or \fC__double
-underlines__\fR will be put inside \fC<strong></strong>\fR. \fC***More than
-two*** of the ___same symbol___\fR should be avoided.
+Text inside \fC*asterisks*\fP or \fC_underlines_\fP will be put inside
+\fC<em></em>\fP. Text inside \fC**double asterisks**\fP or \fC__double
+underlines__\fP will be put inside \fC<strong></strong>\fP. \fC***More than
+two*** of the ___same symbol___\fP should be avoided.
 .
 .IP \[bu]
 .BR Backticks .
-Text inside \fC`backticks`\fR will be put inside \fC<code></code>\fR (both
+Text inside \fC`backticks`\fP will be put inside \fC<code></code>\fP (both
 backticks need to be on the same line).
 .
 .IP \[bu]
 .BR Blockquotes .
-Starting the line with \fC>\fR will surround it with a \fC<blockquote>\fR tag.
+Starting the line with \fC>\fP will surround it with a \fC<blockquote>\fP tag.
 Multiple lines are supported.
 .
 .IP \[bu]
 .BR Links .
-The construct \fC[A link](https://example.com)\fR will be converted into \fC<a
-href="https://example.com">A link</a>\fR.
+The construct \fC[A link](https://example.com)\fP will be converted into \fC<a
+href="https://example.com">A link</a>\fP.
 .IP
-Special case is the form \fC[=somemacro Link title](https://anything)\fR which
+Special case is the form \fC[=somemacro Link title](https://anything)\fP which
 prepends the body of a macro
 .I somemacro
-into the \fC<a></a>\fR tag (here broken into multiple lines for clarity):
+into the \fC<a></a>\fP tag (here broken into multiple lines for clarity):
 .CDS 8
 <a href="https://anything">
 <!-- contents of somemacro -->
@@ -139,22 +139,22 @@ This can, for example, be used to add
 icons to links. See
 .BR Macros .
 .IP
-Also, the form \fC[(Link title)](http://asite.com)\fR will surround the link
-title (text between \fC<a></a>\fR tags) with \fC<span></span>\fR, like so:
-.CDS 4
+Also, the form \fC[(Link title)](http://asite.com)\fP will surround the link
+title (text between \fC<a></a>\fP tags) with \fC<span></span>\fP, like so:
+.CDS 8
 <a href="http://asite.com"><span>Link title</span></a>
 .CDE
 .IP
 This allows for separate styling of link text. It can be combined with the
 macro-form:
-.CDS 4
+.CDS 8
 [=somemacro (Link title)](http://asite.com)
 .CDE
 .IP
 It will prepend the body of a macro
 .I somemacro
-outside of the \fC<span></span>\fR:
-.CDS 4
+outside of the \fC<span></span>\fP:
+.CDS 8
 <a href="http://asite.com">
 <!-- contents of somemacro -->
 <span>Link title</span></a>
@@ -162,64 +162,139 @@ outside of the \fC<span></span>\fR:
 .
 .IP \[bu]
 .BR "Line breaks" .
-Two spaces followed by a newline will become \fC<br />\fR.
+Two spaces followed by a newline will become \fC<br />\fP.
 .
 .SS Directives
 .
 .IP \[bu] 4
+.BR "Brand \[lq]watermark\[rq]" .
+Directive \fC{made-by}\fP is converted into a div with the id \fCmade-by\fP
+containing the \[lq]watermark\[rq] text and a link to the
+.B slweb
+home page.
+.
+.IP \[bu]
+.BR "CSV templating" .
+Directive \fC{csv "csvfile"}{/csv}\fP marks a template. Whatever is between
+\fC{csv}\fP and \fC{/csv}\fP will be processed by
+.B slweb
+and collected as a template. Then, file \fIcsvfile.csv\fP will be read and for
+each of its lines the collected template will be output, substituting each
+occurence of \fC$\f[CI]n\fR (where \fIn\fP is between 1 and 9, inclusive) with
+the corresponding 
+.SM CSV 
+field of the read line.
+.SM CSV
+file needs to use semicolons (;) as delimiters (or set
+.B csv-delimiter 
+as a
+.SM YAML
+variable in the calling
+.I .slw
+file) and double quotation marks (") as field boundaries. First line in the
+.SM CSV
+file is skipped as a header line.
+.
+.IP "" 8
+For example, having a file \fIsales.csv\fP:
+.
+.CDS 8
+"Item";"Q1 2020";"Q2 2020";"Q3 2020";"Q4 2020"
+"Toothpick";"15.2";"12";"16.4";"10"
+"Pot";"1.2";"2";"5";"3.5"
+.CDE
+.
+.IP "" 4
+We can write
+.
+.CDS 8
+{csv "sales"}
+{.sales-segment}
+Item {q}$1{/q} sales by quarter for the last year in 
+thousands of units sold were as follows:
+{.q1}$2{/.q1} {.q2}$3{/.q2} 
+{.q3}$4{/.q3} {.q4}$5{/.q4}
+{/.sales-segment}
+{/csv}
+.CDE
+.
+.IP "" 4
+to get:
+.
+.CDS 8
+<div class="sales-segment">
+Item <q>Toothpick</q> sales by quarter for the last year in 
+thousands of units sold were as follows:
+<div class="q1">15.2</div> <div class="q2">12</div> 
+<div class="q3">16.4</div> <div class="q4">10</div>
+</div>
+<div class="sales-segment">
+Item <q>Pot</q> sales by quarter for the last year in 
+thousands of units sold were as follows:
+<div class="q1">1.2</div> <div class="q2">2</div> 
+<div class="q3">5</div> <div class="q4">3.5</div>
+</div>
+.CDE
+.
+.IP "" 4
+.SM CSV
+directives can't be nested and doing so will produce an error.
+.
+.IP \[bu] 4
 .BR "General tags" .
-Directive \fC{sometag}{/sometag}\fR will be transformed into
-\fC<sometag></sometag>\fR.
+Directive \fC{sometag}{/sometag}\fP will be transformed into
+\fC<sometag></sometag>\fP.
 .
 .RS
 .IP \- 4
 .BR "Class attributes" .
-Directive \fC{tag.myclass mysecondclass}{/tag}\fR will be transformed into
-\fC<tag class="myclass mysecondclass"></tag>\fR. Only one class attribute is
+Directive \fC{tag.myclass mysecondclass}{/tag}\fP will be transformed into
+\fC<tag class="myclass mysecondclass"></tag>\fP. Only one class attribute is
 permitted per tag directive (subsequent dots will be inserted as part of the
-\fCclass\fR attribute), but you can include multiple classes by separating them
+\fCclass\fP attribute), but you can include multiple classes by separating them
 with a space, just like in
 .SM HTML,
 and you can have both a class attribute and an id attribute per tag.
 
-A variation of this is to use a special form \fC{.myclass}{/.myclass}\fR, which
-will be transformed into \fC<div class="myclass"></div>\fR.
+A variation of this is to use a special form \fC{.myclass}{/.myclass}\fP, which
+will be transformed into \fC<div class="myclass"></div>\fP.
 .
 .IP \-
 .BR "Id attributes" .
-Directive \fC{tag#myid}{/tag}\fR will be transformed into \fC<tag
-id="myid"></tag>\fR. Only one id attribute is permitted per tag directive
-(subsequent hash signs will be included as part of the \fCid\fR attribute), and
+Directive \fC{tag#myid}{/tag}\fP will be transformed into \fC<tag
+id="myid"></tag>\fP. Only one id attribute is permitted per tag directive
+(subsequent hash signs will be included as part of the \fCid\fP attribute), and
 you can have both an id attribute and a class attribute per tag.
 
-A variation of this is to use a special form \fC{#myid}{/#myid}\fR, which will
-be transformed into \fC<div id="myid"></div>\fR.
+A variation of this is to use a special form \fC{#myid}{/#myid}\fP, which will
+be transformed into \fC<div id="myid"></div>\fP.
 .RE
 .
-.IP \[bu] 4
+.IP \[bu]
 .BR Includes .
-Directive \fC{include "somefile"}\fR will fork, parse
+Directive \fC{include "somefile"}\fP will fork, parse
 .I somefile.slw
 (related to
 .IR basedir )
 and output the resulting
 .SM HTML
-as if the option \fC\-\-body\-only\fR was specified. All macros and
+as if the option \fC\-\-body\-only\fP was specified. All macros and
 .SM YAML
 variables will be preserved.
 .
-.IP \[bu] 4
+.IP \[bu]
 .BR Macros .
-Macros can be declared using the directive \fC{=macroname}{/=macroname}\fR,
+Macros can be declared using the directive \fC{=macroname}{/=macroname}\fP,
 where
 .I macroname
 is the name of the macro. Anything between those two tags will then become the
-body of a macro. Whenever \fC{=macroname}\fR is subsequently encountered in the
-file, it will be replaced by the macro body.
+body of a macro. Whenever \fC{=macroname}\fP is subsequently encountered in the
+file, it will be replaced by the macro body. Macro definitions can't be nested
+nor can they contain macro calls, and doing so will produce an error.
 .
-.IP \[bu] 4
+.IP \[bu]
 .BR "Subdirectory inclusion (blogging directive)" .
-The command \fC{incdir \fInum\fC =\fImacroname\fC}\fR
+The command \fC{incdir \fInum\fC =\fImacroname\fC}\fP
 .RI ( num
 and
 .I macroname
@@ -228,7 +303,7 @@ are optional) will be expanded as follows:
 .RS
 .nr list 1 1
 .IP \n[list]. 4
-A \fC<ul class="incdir">\fR tag will be inserted into the document instead of
+A \fC<ul class="incdir">\fP tag will be inserted into the document instead of
 the directive.
 .
 .IP \n+[list].
@@ -236,14 +311,14 @@ For every subdirectory of
 .IR basedir , 
 up to
 .I num
-(if present) or 5 (if omitted) total subdirectories, a \fC<li>\fR
-tag will be inserted into the \fCul\fR tag.
+(if present) or 5 (if omitted) total subdirectories, a \fC<li>\fP
+tag will be inserted into the \fCul\fP tag.
 .
 .IP \n+[list].
-A \fC<details>\fR tag will be inserted into each \fC<li>\fR tag.
+A \fC<details>\fP tag will be inserted into each \fC<li>\fP tag.
 .
 .IP \n+[list].
-Inside the \fC<details>\fR tag, a \fC<summary>\fR tag will be inserted with the
+Inside the \fC<details>\fP tag, a \fC<summary>\fP tag will be inserted with the
 name of the subdirectory. If
 .I macroname
 is present, the name of the subdirectory will be prepended with the body of a
@@ -254,8 +329,8 @@ macro
 files as arrows).
 .
 .IP \n+[list].
-After the \fC<summary>\fR tag a \fC<div>\fR tag will be inserted into
-\fC<details>\fR, containing the concatenated output from processing each of the
+After the \fC<summary>\fP tag a \fC<div>\fP tag will be inserted into
+\fC<details>\fP, containing the concatenated output from processing each of the
 .I .slw
 files inside that subdirectory in reverse lexicographical order, in a manner
 similar to the
@@ -267,20 +342,20 @@ directive. (See
 .
 .IP \[bu]
 .BR "Previous Git commit information" .
-Directive \fC{git\-log}\fR is converted into a div with the id \fCgit\-log\fR
+Directive \fC{git-log}\fP is converted into a div with the id \fCgit-log\fP
 containing the information about the previous commit (as having information
 about the current commit would be impossible).
-.
-.IP \[bu]
-.BR "Brand \[lq]watermark\[rq]" .
-Directive \fC{made\-by}\fR is converted into a div with the id \fCmade\-by\fR
-containing the \[lq]watermark\[rq] text and a link to the
-.B slweb
-home page.
 .
 .SS Special YAML variables
 .
 .IP \[bu] 4
+.BR csv-delimiter .
+Changes the delimiter used for parsing of
+.I .csv
+files. By default, this will be a semicolon (;). See
+.BR "CSV templating" .
+.
+.IP \[bu]
 .BR date .
 If present, this variable, assumed to be in
 .SM ISO
@@ -293,24 +368,24 @@ directive. The actual values used depend on the source-level constant
 .IR timestamp_format .
 .
 .IP \[bu]
-.BR ext\-in\-permalink .
+.BR ext-in-permalink .
 If set to \[lq]0\[rq], permalinks generated by the
 .I incdir
 directive will not have the extension included in the
 .I href
-attribute. For example, instead of \fCblog/2020/august.html\fR, the resulting
-permalink will have \fCblog/2020/august\fR. 
+attribute. For example, instead of \fCblog/2020/august.html\fP, the resulting
+permalink will have \fCblog/2020/august\fP. 
 .
 .IP \[bu]
-.BR favicon\-url .
+.BR favicon-url .
 if present, this
 .SM URL
 will be used as a favicon
 .SM URL
-instead of the default, \fC/favicon.ico\fR.
+instead of the default, \fC/favicon.ico\fP.
 .
 .IP \[bu]
-.BR permalink\-url .
+.BR permalink-url .
 If present, this
 .SM URL
 will completely replace the link used in the
@@ -326,7 +401,7 @@ provided to the
 directive.
 .
 .IP \[bu]
-.BR samedir\-permalink .
+.BR samedir-permalink .
 If set to \[lq]1\[rq], path in the permalink generated by the presence of
 .I date 
 variable will be converted (with
@@ -335,21 +410,21 @@ to be relative to the directory containing the input file. Otherwise, directory
 in the permalink will remain unchanged.
 .
 .IP \[bu]
-.BR site\-desc .
+.BR site-desc .
 The contents of this variable will be inserted as the value of the
 .I content
-attribute of the \fC<meta name="description">\fR tag.
+attribute of the \fC<meta name="description">\fP tag.
 .
 .IP \[bu]
-.BR site\-name .
-The contents of this variable will be inserted inside the \fC<title></title>\fR
+.BR site-name .
+The contents of this variable will be inserted inside the \fC<title></title>\fP
 tags.
 .
 .IP \[bu]
 .BR stylesheet .
 The contents of this variable will be treated as a
 .SM CSS
-file name to be included using the \fC<link rel="stylesheet" />\fR tag. You can
+file name to be included using the \fC<link rel="stylesheet" />\fP tag. You can
 have more than one 
 .I stylesheet
 declaration per 
@@ -360,12 +435,12 @@ file.
 .BR title .
 If present, contents of this variable will be prepended to the body as a heading
 with the level determined by the 
-.I title\-heading\-level 
+.I title-heading-level 
 variable, defaulting
-to 2.  (\fCtitle: Some title\fR  becomes  \fC<h2>Some title</h2>\fR).
+to 2.  (\fCtitle: Some title\fP  becomes  \fC<h2>Some title</h2>\fP).
 .
 .IP \[bu]
-.BR title\-heading\-level .
+.BR title-heading-level .
 See
 .BR title .
 .
@@ -376,7 +451,7 @@ See
 If present, the body of this macro will be inserted into permalinks generated by
 the
 .I incdir
-directive, similar to the macro\-form of links.
+directive, similar to the macro-form of links.
 .
 .SH "SEE ALSO"
 .BR sed (1)
@@ -384,7 +459,7 @@ directive, similar to the macro\-form of links.
 .SH EXAMPLES
 .
 .LP
-Given the file \fCindex.slw\fR in the current directory:
+Given the file \fCindex.slw\fP in the current directory:
 .CDS 4
 ---
 site-name: Test website
@@ -402,7 +477,7 @@ after using the command:
 .CDS 4
 $ slweb index.slw > index.html
 .CDE
-file \fCindex.html\fR contains:
+file \fCindex.html\fP contains:
 .CDS 4
 <!DOCTYPE html>
 <html lang="en">
@@ -429,7 +504,7 @@ file \fCindex.html\fR contains:
 .
 .IP \[bu] 4
 Currently there is no way to determine where the paragraph inside a tag should
-begin and end without adding blank lines or using the \fC{p}{/p}\fR notation.
+begin and end without adding blank lines or using the \fC{p}{/p}\fP notation.
 For example, the code
 .
 .CDS 8
