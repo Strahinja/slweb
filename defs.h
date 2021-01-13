@@ -99,8 +99,8 @@ const ULONG ST_CSV_BODY         = 1 << 17;
 
 const UBYTE ST_CS_NONE         = 0;
 const UBYTE ST_CS_HEADER       = 1;
-const UBYTE ST_CS_REGISTER     = 2;
-const UBYTE ST_CS_QUOTE        = 3;
+const UBYTE ST_CS_REGISTER     = 1 << 2;
+const UBYTE ST_CS_QUOTE        = 1 << 3;
 #pragma GCC diagnostic pop
 
 #endif /* __DEFS_H */
