@@ -22,24 +22,19 @@ the directive `{git-log}`.
 ```
 $ git clone https://github.com/Strahinja/slweb.git
 $ cd slweb
+$ su
 ```
 
 Then, if you have [apenwarr/redo][5]:
 
 ```
-$ doas redo install
+# redo install
 ```
 
 if you don't:
 
 ```
-$ doas ./do install
-```
-
-or with **sudo**(1):
-
-```
-$ sudo ./do install
+# ./do install
 ```
 
 ## Examples

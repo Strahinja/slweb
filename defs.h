@@ -38,7 +38,7 @@
 #include <uniwidth.h>
 
 #define PROGRAMNAME   "slweb"
-#define VERSION       "0.3.3-beta"
+#define VERSION       "0.3.4"
 #define COPYRIGHTYEAR "2020, 2021"
 
 #define BUFSIZE       1024
@@ -75,6 +75,7 @@ typedef struct
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-const-variable"
 const UBYTE MAX_HEADING_LEVEL = 4;
+const UBYTE MAX_CSV_REGISTERS = 9;
 
 const ULONG ST_NONE             = 0;
 const ULONG ST_YAML             = 1;
@@ -95,6 +96,11 @@ const ULONG ST_IMAGE            = 1 << 14;
 const ULONG ST_IMAGE_SECOND_ARG = 1 << 15;
 const ULONG ST_MACRO_BODY       = 1 << 16;
 const ULONG ST_CSV_BODY         = 1 << 17;
+
+const UBYTE ST_CS_NONE         = 0;
+const UBYTE ST_CS_HEADER       = 1;
+const UBYTE ST_CS_REGISTER     = 2;
+const UBYTE ST_CS_QUOTE        = 3;
 #pragma GCC diagnostic pop
 
 #endif /* __DEFS_H */

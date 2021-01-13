@@ -24,6 +24,7 @@ static size_t colno            = 1;
 static char* input_filename    = NULL;
 static char* input_dirname     = NULL;
 static char* basedir           = NULL;
+static char* incdir            = NULL;
 static KeyValue* vars          = NULL;
 static KeyValue* pvars         = NULL;
 static size_t vars_count       = 0;
@@ -35,6 +36,7 @@ static KeyValue* plinks        = NULL;
 static size_t links_count      = 0;
 static uint8_t* csv_template   = NULL;
 static size_t csv_template_len = 0;
+static char* csv_filename      = NULL;
 static ULONG state             = ST_NONE;
 
 
@@ -72,7 +74,8 @@ error(int code, uint8_t* fmt, ...)
     va_start(args, fmt);
     u8_vsnprintf(buf, sizeof(buf), (const char*)fmt, args);
     va_end(args);
-    fprintf(stderr, "%s:%lu:%lu: %s", PROGRAMNAME, lineno, colno, buf);
+    fprintf(stderr, "%s:%s:%lu:%lu: %s", PROGRAMNAME, input_filename, 
+            lineno, colno, buf);
     return code;
 }
 
@@ -318,6 +321,74 @@ process_git_log(FILE* output)
 }
 
 int
+print_csv_row(FILE* output, uint8_t** csv_header, uint8_t** csv_register)
+{
+    uint8_t* pcsv_template = csv_template;
+    UBYTE csv_state = ST_CS_NONE;
+    UBYTE num = 0;
+
+    while (*pcsv_template)
+    {
+        switch (*pcsv_template)
+        {
+        case '$':
+            if (csv_state & ST_CS_REGISTER)
+            {
+                fprintf(output, "$");
+                csv_state &= ST_CS_REGISTER;
+            }
+            else
+                csv_state |= ST_CS_REGISTER;
+            pcsv_template++;
+            break;
+        case '#':
+            if (csv_state & ST_CS_REGISTER)
+            {
+                if (csv_state & ST_CS_HEADER)
+                {
+                    error(1, (uint8_t*)"csv: Invalid header register mark\n");
+                    csv_state &= ~(ST_CS_REGISTER | ST_CS_HEADER);
+                }
+                else
+                    csv_state |= ST_CS_HEADER;
+            }
+            else
+                fprintf(output, "#");
+            pcsv_template++;
+            break;
+        case '1': case '2': case '3': case '4': case '5': 
+        case '6': case '7': case '8': case '9':
+            if (csv_state & ST_CS_HEADER)
+            {
+                num = *pcsv_template - '0';
+                fprintf(output, "%s", csv_header[num-1]);
+                csv_state &= ~(ST_CS_REGISTER | ST_CS_HEADER);
+            }
+            else if (csv_state & ST_CS_REGISTER)
+            {
+                num = *pcsv_template - '0';
+                fprintf(output, "%s", csv_register[num-1]);
+                csv_state &= ~ST_CS_REGISTER;
+            }
+            else
+                fprintf(output, "%c", *pcsv_template);
+            pcsv_template++;
+            break;
+        default:
+            if (csv_state & ST_CS_REGISTER)
+            {
+                error(1, (uint8_t*)"csv: Invalid register mark\n");
+                csv_state &= ~ST_CS_REGISTER;
+            }
+            else
+                fprintf(output, "%c", *pcsv_template);
+            pcsv_template++;
+        }
+    }
+    return 0;
+}
+
+int
 process_csv(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links, 
         BOOL end_tag)
 {
@@ -327,10 +398,137 @@ process_csv(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links,
     if (end_tag)
     {
         state &= ~ST_CSV_BODY;
-        /*
-         *fprintf(stderr, "%ld:%ld:csv: /end\n", lineno, colno);
-         *fprintf(stderr, "csv_template = {%s}\n", csv_template);
-         */
+
+        FILE* csv = fopen(csv_filename, "rt");
+        size_t csv_lineno = 0;
+        uint8_t* bufline = NULL;
+        uint8_t* pbufline = NULL;
+        uint8_t* token = NULL;
+        uint8_t* ptoken = NULL;
+        UBYTE csv_state = ST_CS_NONE;
+        uint8_t* csv_header[MAX_CSV_REGISTERS];
+        UBYTE current_header = 0;
+        uint8_t* csv_register[MAX_CSV_REGISTERS];
+        UBYTE current_register = 0;
+        uint8_t* csv_delimiter = get_value(vars, vars_count, (uint8_t*)"csv-delimiter", NULL);
+
+        if (!csv)
+            exit(error(ENOENT, (uint8_t*)"csv: No such file: %s\n", csv_filename));
+
+        CALLOC(bufline, uint8_t, BUFSIZE)
+        CALLOC(token, uint8_t, BUFSIZE)
+        for (UBYTE i = 0; i < MAX_CSV_REGISTERS; i++)
+            CALLOC(csv_header[i], uint8_t, BUFSIZE)
+        for (UBYTE i = 0; i < MAX_CSV_REGISTERS; i++)
+            CALLOC(csv_register[i], uint8_t, BUFSIZE)
+
+        while (!feof(csv))
+        {
+            uint8_t* eol = NULL;
+            if (!fgets((char*)bufline, BUFSIZE-1, csv))
+                break;
+            eol = u8_strchr(bufline, (ucs4_t)'\n');
+            if (eol)
+                *eol = '\0';
+
+            pbufline = bufline;
+            *token = '\0';
+            ptoken = token;
+            current_register = 0;
+            while (*pbufline)
+            {
+                switch (*pbufline)
+                {
+                case '"':
+                    if (csv_state & ST_CS_QUOTE)
+                        csv_state &= ~ST_CS_QUOTE;
+                    else
+                        csv_state |= ST_CS_QUOTE;
+                    pbufline++;
+                    break;
+                case ';':
+                case ',':
+                    if (csv_state & ST_CS_QUOTE)
+                        *ptoken++ = *pbufline;
+                    else
+                    {
+                        *ptoken = '\0';
+                        if (csv_lineno > 0)
+                        {
+                            if (current_register < MAX_CSV_REGISTERS)
+                                u8_strncpy(csv_register[current_register++], token,
+                                        u8_strlen(token)+1);
+                        }
+                        else
+                        {
+                            if (current_header < MAX_CSV_REGISTERS)
+                                u8_strncpy(csv_header[current_header++], token, 
+                                        u8_strlen(token)+1);
+                        }
+                        *token = '\0';
+                        ptoken = token;
+                    }
+                    pbufline++;
+                    break;
+                default:
+                    if (csv_state & ST_CS_QUOTE)
+                        *ptoken++ = *pbufline++;
+                    else
+                    {
+                        if (csv_delimiter && *pbufline == *csv_delimiter)
+                        {
+                            *ptoken = '\0';
+                            if (csv_lineno > 0)
+                            {
+                                if (current_register < MAX_CSV_REGISTERS)
+                                    u8_strncpy(csv_register[current_register++], token,
+                                            u8_strlen(token)+1);
+                            }
+                            else
+                            {
+                                if (current_header < MAX_CSV_REGISTERS)
+                                    u8_strncpy(csv_header[current_header++], token, 
+                                            u8_strlen(token)+1);
+                            }
+                            *token = '\0';
+                            ptoken = token;
+                            pbufline++;
+                        }
+                        else
+                            *ptoken++ = *pbufline++;
+                    }
+                }
+            }
+            *ptoken = '\0';
+            if (csv_lineno > 0)
+            {
+                if (current_register < MAX_CSV_REGISTERS)
+                    u8_strncpy(csv_register[current_register++], token,
+                            u8_strlen(token)+1);
+            }
+            else
+            {
+                if (current_header < MAX_CSV_REGISTERS)
+                    u8_strncpy(csv_header[current_header++], token, 
+                            u8_strlen(token)+1);
+            }
+            *token = '\0';
+            ptoken = token;
+
+            if (csv_lineno > 0 && pbufline != bufline)
+                print_csv_row(output, csv_header, csv_register);
+
+            for (UBYTE i = 0; i < MAX_CSV_REGISTERS; i++)
+                *csv_register[i] = 0;
+            csv_lineno++;
+        }
+        fclose(csv);
+        for (UBYTE i = MAX_CSV_REGISTERS; i > 0; i--)
+            free(csv_register[i-1]);
+        for (UBYTE i = MAX_CSV_REGISTERS; i > 0; i--)
+            free(csv_header[i-1]);
+        free(token);
+        free(bufline);
 
         free(csv_template);
         csv_template = NULL;
@@ -345,14 +543,17 @@ process_csv(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links,
         uint8_t* saveptr = NULL;
         uint8_t* args = u8_strtok(token, (uint8_t*)" ", &saveptr);
         args = u8_strtok(NULL, (uint8_t*)" ", &saveptr);
-        /*
-         *if (args)
-         *{
-         *    fprintf(stderr, "%ld:%ld:csv: args=[%s]\n", 
-         *            lineno, colno,
-         *            args);
-         *}
-         */
+        if (!args)
+            exit(error(EINVAL, (uint8_t*)"csv: Arguments required\n"));
+        size_t args_len = u8_strlen(args);
+        if (*args != '"' || *(args + args_len - 1) != '"')
+            exit(error(EINVAL, (uint8_t*)"csv: First argument must be a string\n"));
+        if (!csv_filename)
+            CALLOC(csv_filename, uint8_t, BUFSIZE)
+        strncpy(csv_filename, input_dirname, strlen(input_dirname)+1);
+        strncat(csv_filename, "/", 2);
+        strncat(csv_filename, (char*)args+1, args_len-2);
+        strncat(csv_filename, ".csv", 5);
     }
 
     return 0;
@@ -433,7 +634,7 @@ filter_subdirs(const struct dirent* node)
     char* nodename = NULL;
     
     CALLOC(nodename, char, BUFSIZE)
-    snprintf(nodename, BUFSIZE, "%s/%s", basedir, node->d_name);
+    snprintf(nodename, BUFSIZE, "%s/%s", incdir, node->d_name);
     
     if (lstat(nodename, &st) < 0 || !S_ISDIR(st.st_mode))
     {
@@ -489,7 +690,7 @@ process_incdir_subdir(const char* subdirname, FILE* output, BOOL details_open,
     char* abs_subdirname = NULL;
 
     CALLOC(abs_subdirname, char, BUFSIZE)
-    snprintf(abs_subdirname, BUFSIZE, "%s/%s", basedir, subdirname);
+    snprintf(abs_subdirname, BUFSIZE, "%s/%s", incdir, subdirname);
 
     if ((names_total = scandir(abs_subdirname, &namelist, &filter_slw, 
                 &reverse_alphacompare)) < 0)
@@ -556,6 +757,7 @@ process_incdir(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links)
     uint8_t* saveptr = NULL;
     /* skipping the first token (incdir) */
     uint8_t* arg = u8_strtok(token, (uint8_t*)" ", &saveptr);
+    size_t arg_len = 0;
     long num = 5;
     uint8_t* macro_body = NULL;
     struct dirent** namelist;
@@ -563,9 +765,23 @@ process_incdir(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links)
     long names_output;
     BOOL details_open = TRUE;
 
+
     arg = u8_strtok(NULL, (uint8_t*)" ", &saveptr);
     if (!arg)
-        return warning(1, (uint8_t*)"incdir: Arguments required\n");
+        exit(error(1, (uint8_t*)"incdir: Arguments required\n"));
+
+    arg_len = u8_strlen(arg);
+
+    CALLOC(incdir, char, BUFSIZE)
+    if (*arg != '"' || *(arg + arg_len - 1) != '"')
+        exit(error(1, (uint8_t*)"incdir: First argument not string\n"));
+
+    strncpy(incdir, (char*)(arg+1), arg_len-2);
+
+    arg = u8_strtok(NULL, (uint8_t*)" ", &saveptr);
+    if (!arg)
+        exit(error(1, (uint8_t*)"incdir: Second argument required\n"));
+
     if (*arg == '=')
         macro_body = get_value(macros, macros_count, arg+1, NULL);
     else
@@ -574,21 +790,24 @@ process_incdir(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links)
         while (parg && *parg)
         {
             if (*parg < '0' || *parg > '9')
-                return warning(1, (uint8_t*)"incdir: Non-numeric argument\n");
+                exit(error(1, (uint8_t*)"incdir: Non-numeric argument\n"));
             parg++;
         }
         num = strtol((char*)arg, NULL, 10);
         if (errno)
-            return warning(errno, (uint8_t*)"incdir: Invalid num\n");
+            exit(error(errno, (uint8_t*)"incdir: Invalid num\n"));
         arg = u8_strtok(NULL, (uint8_t*)" ", &saveptr);
-        if (*arg != '=')
-            return warning(1, (uint8_t*)"incdir: Second argument not macro\n");
-        macro_body = get_value(macros, macros_count, arg+1, NULL);
+        if (arg)
+        {
+            if (*arg != '=')
+                exit(error(1, (uint8_t*)"incdir: Third argument not macro\n"));
+            macro_body = get_value(macros, macros_count, arg+1, NULL);
+        }
     }
 
     print_output(output, "<ul class=\"incdir\">\n");
 
-    if (scandir(basedir, &namelist, &filter_subdirs,
+    if (scandir(incdir, &namelist, &filter_subdirs,
             &reverse_alphacompare) < 0)
     {
         perror("scandir");
@@ -606,6 +825,7 @@ process_incdir(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links)
         names_output++;
     }
     free(namelist);
+    free(incdir);
 
     print_output(output, "</ul>\n");
 

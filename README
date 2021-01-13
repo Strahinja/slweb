@@ -20,18 +20,15 @@ git(1) is, aside from cloning the repository, required to use the directive
 
 $ git clone https://github.com/Strahinja/slweb.git
 $ cd slweb
+$ su
 
     Then, if you have djb redo:
 
-$ doas redo install
+# redo install
 
     if you don't:
 
-$ doas ./do install
-
-    or with sudo(1) instead of doas(1):
-
-$ sudo ./do install
+# ./do install
 
 
                                     Examples
