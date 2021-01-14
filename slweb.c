@@ -19,37 +19,38 @@
 
 #include "defs.h"
 
-static size_t lineno           = 0;
-static size_t colno            = 1;
-static char* input_filename    = NULL;
-static char* input_dirname     = NULL;
-static char* basedir           = NULL;
-static char* incdir            = NULL;
-static KeyValue* vars          = NULL;
-static KeyValue* pvars         = NULL;
-static size_t vars_count       = 0;
-static KeyValue* macros        = NULL;
-static KeyValue* pmacros       = NULL;
-static size_t macros_count     = 0;
-static KeyValue* links         = NULL;
-static KeyValue* plinks        = NULL;
-static size_t links_count      = 0;
-static uint8_t* csv_template   = NULL;
-static size_t csv_template_len = 0;
-static char* csv_filename      = NULL;
-static ULONG state             = ST_NONE;
-
+static size_t lineno            = 0;
+static size_t colno             = 1;
+static char* input_filename     = NULL;
+static char* input_dirname      = NULL;
+static char* basedir            = NULL;
+static size_t basedir_size      = 0;
+static char* incdir             = NULL;
+static KeyValue* vars           = NULL;
+static KeyValue* pvars          = NULL;
+static size_t vars_count        = 0;
+static KeyValue* macros         = NULL;
+static KeyValue* pmacros        = NULL;
+static size_t macros_count      = 0;
+static KeyValue* links          = NULL;
+static KeyValue* plinks         = NULL;
+static size_t links_count       = 0;
+static uint8_t* csv_template    = NULL;
+static size_t csv_template_size = 0;
+static char* csv_filename       = NULL;
+static ULONG state              = ST_NONE;
 
 #define CHECKEXITNOMEM(ptr) { if (!ptr) exit(error(ENOMEM, \
                 (uint8_t*)"Memory allocation failed (out of memory?)\n")); }
 
-#define CALLOC(ptr, ptrtype, nmemb) { \
-    ptr = calloc(nmemb, sizeof(ptrtype)); \
+#define CALLOC(ptr, ptrtype, nmemb) { ptr = calloc(nmemb, sizeof(ptrtype)); \
     CHECKEXITNOMEM(ptr) }
 
-#define REALLOC(ptr, newsize) { \
-    ptr = realloc(ptr, newsize); \
+#define REALLOC(ptr, newsize) { ptr = realloc(ptr, newsize); \
     CHECKEXITNOMEM(ptr) }
+
+#define REALLOCARRAY(ptr, membtype, newcount) { ptr = realloc(ptr, \
+        newcount * sizeof(membtype)); CHECKEXITNOMEM(ptr) }
 
 int
 version()
@@ -74,7 +75,7 @@ error(int code, uint8_t* fmt, ...)
     va_start(args, fmt);
     u8_vsnprintf(buf, sizeof(buf), (const char*)fmt, args);
     va_end(args);
-    fprintf(stderr, "%s:%s:%lu:%lu: %s", PROGRAMNAME, input_filename, 
+    fprintf(stderr, "%s:%s:%lu:%lu: %s\n", PROGRAMNAME, input_filename, 
             lineno, colno, buf);
     return code;
 }
@@ -87,13 +88,13 @@ warning(int code, uint8_t* fmt, ...)
     va_start(args, fmt);
     u8_vsnprintf(buf, sizeof(buf), (const char*)fmt, args);
     va_end(args);
-    fprintf(stderr, "Warning: %s", buf);
+    fprintf(stderr, "Warning: %s\n", buf);
     return code;
 }
 
 int
-slweb_parse(uint8_t* buffer, FILE* output, 
-        BOOL body_only, BOOL read_yaml_macros_and_links);
+slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only, 
+        BOOL read_yaml_macros_and_links);
 
 char*
 substr(const char* src, int start, int finish)
@@ -118,7 +119,15 @@ substr(const char* src, int start, int finish)
 BOOL
 startswith(const char* s, const char* what)
 {
-    return s && what && !strcmp(substr(s, 0, strlen(what)), what);
+    if (!s || !what)
+        return 0;
+
+    char* subs = substr(s, 0, strlen(what));
+    BOOL result = !strcmp(subs, what);
+
+    free(subs);
+
+    return result;
 }
 
 uint8_t*
@@ -142,17 +151,20 @@ get_value(KeyValue* list, size_t list_count, uint8_t* key, BOOL* seen)
 }
 
 int
-set_basedir(char* arg, char** basedir)
+set_basedir(char* arg, char** basedir, size_t* basedir_size)
 {
     size_t basedir_len = 0;
-    if (*basedir)
-        free(*basedir);
+    size_t arg_len = strlen(arg);
 
-    if (strlen(arg) < 1)
-        exit(error(1, (uint8_t*)"--basedir: Argument required\n"));
+    if (arg_len < 1)
+        exit(error(1, (uint8_t*)"--basedir: Argument required"));
 
-    CALLOC(*basedir, char, strlen(arg)+1)
-    strcpy(*basedir, arg);
+    if (arg_len > *basedir_size)
+    {
+        *basedir_size = arg_len+1;
+        REALLOC(*basedir, *basedir_size)
+    }
+    strncpy(*basedir, arg, *basedir_size-1);
     basedir_len = strlen(*basedir);
     if (*(*basedir + basedir_len - 1) == '/')
         *(*basedir + basedir_len - 1) = '\0';
@@ -170,7 +182,7 @@ strip_ext(const char* fn)
     dot = strrchr(fn, '.');
     if (!dot)
         return NULL;
-    CALLOC(newname, char, strlen(fn))
+    CALLOC(newname, char, strlen(fn)+1)
     pnewname = newname;
     pfn = fn;
     while (pfn != dot && *pfn)
@@ -183,6 +195,10 @@ print_output(FILE* output, char* fmt, ...)
 {
     uint8_t buf[BUFSIZE];
     va_list args;
+
+    if (!output || !fmt)
+        exit(error(EINVAL, (uint8_t*)"print_output: Invalid argument"));
+
     va_start(args, fmt);
     if (state & ST_CSV_BODY)
     {
@@ -191,17 +207,19 @@ print_output(FILE* output, char* fmt, ...)
         buf_len = u8_strlen(buf);
         if (!csv_template)
         {
-            CALLOC(csv_template, uint8_t, BUFSIZE)
-            u8_strncpy(csv_template, buf, buf_len);
-            csv_template_len = buf_len;
+            csv_template_size = BUFSIZE;
+            CALLOC(csv_template, uint8_t, csv_template_size)
+            u8_strncpy(csv_template, buf, BUFSIZE-1);
         }
         else
         {
-            if (csv_template_len + buf_len > sizeof(csv_template))
-                REALLOC(csv_template, sizeof(csv_template) 
-                        + BUFSIZE * sizeof(uint8_t))
-            u8_strncat(csv_template, buf, buf_len);
-            csv_template_len = u8_strlen(csv_template);
+            if (u8_strlen(csv_template) + buf_len > csv_template_size)
+            {
+                csv_template_size += BUFSIZE;
+                REALLOC(csv_template, csv_template_size)
+            }
+            u8_strncat(csv_template, buf, csv_template_size
+                    - u8_strlen(csv_template) - 1);
         }
     }
     else
@@ -213,6 +231,9 @@ print_output(FILE* output, char* fmt, ...)
 int
 print_command(uint8_t* command, FILE* output)
 {
+    if (!command)
+        exit(error(EINVAL, (uint8_t*)"print_command: Invalid argument"));
+
     FILE* cmd_output = popen((char*)command, "r");
 
     if (!cmd_output)
@@ -241,7 +262,7 @@ print_command(uint8_t* command, FILE* output)
 }
 
 int
-read_file_into_buffer(uint8_t** buffer, char* input_filename, 
+read_file_into_buffer(uint8_t** buffer, size_t* buffer_size, char* input_filename, 
         char** input_dirname, FILE** input)
 {
     struct stat fs;
@@ -249,16 +270,22 @@ read_file_into_buffer(uint8_t** buffer, char* input_filename,
 
     *input = fopen(input_filename, "r");
     if (!*input)
-        return error(ENOENT, (uint8_t*)"No such file: %s\n", input_filename);
+        return error(ENOENT, (uint8_t*)"No such file: %s", input_filename);
 
     fstat(fileno(*input), &fs);
-    CALLOC(*buffer, uint8_t, fs.st_size)
-    fread((void*)*buffer, sizeof(char), fs.st_size, *input);
+    if (*buffer)
+        free(*buffer);
+    *buffer_size = fs.st_size+1;
+    CALLOC(*buffer, uint8_t, *buffer_size)
+    fread((void*)*buffer, 1, *buffer_size, *input);
+
+    if (*input_dirname)
+        free(*input_dirname);
 
     slash = strrchr(input_filename, '/');
     if (slash)
     {
-        CALLOC(*input_dirname, char, BUFSIZE)
+        CALLOC(*input_dirname, char, strlen(input_filename)+1)
         char* pinput_dirname = *input_dirname;
         char* pinput_filename = input_filename;
         while (pinput_filename && *pinput_filename
@@ -278,7 +305,7 @@ int
 process_heading(uint8_t* token, FILE* output, UBYTE heading_level)
 {
     if (!token || u8_strlen(token) < 1)
-        warning(1, (uint8_t*)"Empty heading\n");
+        warning(1, (uint8_t*)"Empty heading");
 
     print_output(output, "<h%d>%s</h%d>", 
             heading_level, token ? (char*)token : "", heading_level);
@@ -290,27 +317,28 @@ int
 process_git_log(FILE* output)
 {
     if (!input_filename)
-        return warning(1, (uint8_t*)"Cannot use 'git-log' in stdin\n");
+        return warning(1, (uint8_t*)"Cannot use 'git-log' in stdin");
 
     char* basename = NULL;
-    CALLOC(basename, char, strlen(input_filename))
+    size_t basename_size = strlen(input_filename)+1;
+    CALLOC(basename, char, basename_size)
     char* slash = strrchr(input_filename, '/');
     if (slash)
-        strncpy(basename, slash+1, strlen(slash+1));
+        strncpy(basename, slash+1, basename_size-1);
     else
-        strncpy(basename, input_filename, strlen(input_filename));
+        strncpy(basename, input_filename, basename_size-1);
 
     print_output(output, "<div id=\"git-log\">\nPrevious commit:\n");
     uint8_t* command = NULL;
     CALLOC(command, uint8_t, BUFSIZE)
-    u8_snprintf(command, BUFSIZE,
+    u8_snprintf(command, BUFSIZE-1,
             "git log -1 --pretty=format:\"%s %%h %%ci (%%cn) %%d\""
             " || echo \"(Not in a Git repository)\"",
         basename);
     if (print_command(command, output))
     {
         print_output(output, "</div><!--git-log-->\n");
-        return error(1, (uint8_t*)"git-log: Cannot run git\n");
+        return error(1, (uint8_t*)"git-log: Cannot run git");
     }
     print_output(output, "</div><!--git-log-->\n");
 
@@ -346,7 +374,7 @@ print_csv_row(FILE* output, uint8_t** csv_header, uint8_t** csv_register)
             {
                 if (csv_state & ST_CS_HEADER)
                 {
-                    error(1, (uint8_t*)"csv: Invalid header register mark\n");
+                    error(1, (uint8_t*)"csv: Invalid header register mark");
                     csv_state &= ~(ST_CS_REGISTER | ST_CS_HEADER);
                 }
                 else
@@ -377,7 +405,7 @@ print_csv_row(FILE* output, uint8_t** csv_header, uint8_t** csv_register)
         default:
             if (csv_state & ST_CS_REGISTER)
             {
-                error(1, (uint8_t*)"csv: Invalid register mark\n");
+                error(1, (uint8_t*)"csv: Invalid register mark");
                 csv_state &= ~ST_CS_REGISTER;
             }
             else
@@ -413,7 +441,7 @@ process_csv(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links,
         uint8_t* csv_delimiter = get_value(vars, vars_count, (uint8_t*)"csv-delimiter", NULL);
 
         if (!csv)
-            exit(error(ENOENT, (uint8_t*)"csv: No such file: %s\n", csv_filename));
+            exit(error(ENOENT, (uint8_t*)"csv: No such file: %s", csv_filename));
 
         CALLOC(bufline, uint8_t, BUFSIZE)
         CALLOC(token, uint8_t, BUFSIZE)
@@ -425,7 +453,7 @@ process_csv(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links,
         while (!feof(csv))
         {
             uint8_t* eol = NULL;
-            if (!fgets((char*)bufline, BUFSIZE-1, csv))
+            if (!fgets((char*)bufline, BUFSIZE, csv))
                 break;
             eol = u8_strchr(bufline, (ucs4_t)'\n');
             if (eol)
@@ -457,13 +485,13 @@ process_csv(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links,
                         {
                             if (current_register < MAX_CSV_REGISTERS)
                                 u8_strncpy(csv_register[current_register++], token,
-                                        u8_strlen(token)+1);
+                                        BUFSIZE-1);
                         }
                         else
                         {
                             if (current_header < MAX_CSV_REGISTERS)
                                 u8_strncpy(csv_header[current_header++], token, 
-                                        u8_strlen(token)+1);
+                                        BUFSIZE-1);
                         }
                         *token = '\0';
                         ptoken = token;
@@ -482,13 +510,13 @@ process_csv(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links,
                             {
                                 if (current_register < MAX_CSV_REGISTERS)
                                     u8_strncpy(csv_register[current_register++], token,
-                                            u8_strlen(token)+1);
+                                            BUFSIZE-1);
                             }
                             else
                             {
                                 if (current_header < MAX_CSV_REGISTERS)
                                     u8_strncpy(csv_header[current_header++], token, 
-                                            u8_strlen(token)+1);
+                                            BUFSIZE-1);
                             }
                             *token = '\0';
                             ptoken = token;
@@ -503,14 +531,13 @@ process_csv(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links,
             if (csv_lineno > 0)
             {
                 if (current_register < MAX_CSV_REGISTERS)
-                    u8_strncpy(csv_register[current_register++], token,
-                            u8_strlen(token)+1);
+                    u8_strncpy(csv_register[current_register++], token, 
+                            BUFSIZE-1);
             }
             else
             {
                 if (current_header < MAX_CSV_REGISTERS)
-                    u8_strncpy(csv_header[current_header++], token, 
-                            u8_strlen(token)+1);
+                    u8_strncpy(csv_header[current_header++], token, BUFSIZE-1);
             }
             *token = '\0';
             ptoken = token;
@@ -532,28 +559,28 @@ process_csv(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links,
 
         free(csv_template);
         csv_template = NULL;
-        csv_template_len = 0;
+        csv_template_size = 0;
     }
     else
     {
         if (state & ST_CSV_BODY)
-            exit(error(1, (uint8_t*)"Can't nest csv directives\n"));
+            exit(error(1, (uint8_t*)"Can't nest csv directives"));
 
         state |= ST_CSV_BODY;
         uint8_t* saveptr = NULL;
         uint8_t* args = u8_strtok(token, (uint8_t*)" ", &saveptr);
         args = u8_strtok(NULL, (uint8_t*)" ", &saveptr);
         if (!args)
-            exit(error(EINVAL, (uint8_t*)"csv: Arguments required\n"));
+            exit(error(EINVAL, (uint8_t*)"csv: Arguments required"));
         size_t args_len = u8_strlen(args);
         if (*args != '"' || *(args + args_len - 1) != '"')
-            exit(error(EINVAL, (uint8_t*)"csv: First argument must be a string\n"));
+            exit(error(EINVAL, (uint8_t*)"csv: First argument must be a string"));
         if (!csv_filename)
             CALLOC(csv_filename, uint8_t, BUFSIZE)
-        strncpy(csv_filename, input_dirname, strlen(input_dirname)+1);
-        strncat(csv_filename, "/", 2);
-        strncat(csv_filename, (char*)args+1, args_len-2);
-        strncat(csv_filename, ".csv", 5);
+        uint8_t* args_base = u8_strdup(args+1);
+        *(args_base + u8_strlen(args_base) - 1) = 0;
+        snprintf(csv_filename, BUFSIZE, "%s/%s.csv", input_dirname, (char*)args_base);
+        free(args_base);
     }
 
     return 0;
@@ -566,24 +593,15 @@ process_include(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links)
         return 0;
 
     if (!input_filename)
-        return warning(1, (uint8_t*)"Cannot use 'include' in stdin\n");
+        return warning(1, (uint8_t*)"Cannot use 'include' in stdin");
 
     uint8_t* ptoken = u8_strchr(token, (ucs4_t)' ');
     char* include_filename = NULL;
     char* pinclude_filename = NULL;
-    CALLOC(include_filename, char, BUFSIZE)
-    pinclude_filename = include_filename;
     
     if (!ptoken)
-        return warning(1, (uint8_t*)"Directive 'include' requires"
-                " an argument\n");
-
-    ptoken++;
-    while (ptoken && *ptoken)
-        if (*ptoken != '"')
-            *pinclude_filename++ = *ptoken++;
-        else 
-            ptoken++;
+        exit(error(1, (uint8_t*)"Directive 'include' requires"
+                " an argument"));
 
     fflush(output);
     pid_t pid = fork();
@@ -593,33 +611,58 @@ process_include(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links)
         wait(&pstatus);
     else if (pid == 0)
     {
+        CALLOC(include_filename, char, BUFSIZE)
+        pinclude_filename = include_filename;
+        ptoken++;
+        while (ptoken && *ptoken)
+            if (*ptoken != '"')
+                *pinclude_filename++ = *ptoken++;
+            else 
+                ptoken++;
+
         if (!strcmp(basedir, "."))
-            strncpy(basedir, input_dirname, strlen(input_dirname));
+            set_basedir(input_dirname, &basedir, &basedir_size);
 
-        sprintf(input_filename, "%s/%s.slw", basedir, include_filename);
+        CALLOC(input_filename, char, BUFSIZE)
+        snprintf(input_filename, BUFSIZE, "%s/%s.slw", basedir, include_filename);
+        free(include_filename);
 
-        FILE* input = NULL;
-        FILE* output = stdout;
-        uint8_t* buffer = NULL;
+        FILE* input        = NULL;
+        FILE* output       = stdout;
+        uint8_t* buffer    = NULL;
+        size_t buffer_size = 0;
+        int result         = 0;
 
-        read_file_into_buffer(&buffer, input_filename, &input_dirname, &input);
+        read_file_into_buffer(&buffer, &buffer_size, input_filename, 
+                &input_dirname, &input);
 
         free(links);
         CALLOC(links, KeyValue, 1)
         links->key = NULL;
         links->value = NULL;
+        links->value_size = 0;
         links_count = 0;
 
         /* First pass: read YAML, macros and links */
-        slweb_parse(buffer, output, TRUE, TRUE);
+        result = slweb_parse(buffer, output, TRUE, TRUE);
+
+        if (result)
+        {
+            free(input_filename);
+            free(buffer);
+            return result;
+        }
 
         /* Second pass: parse and output */
-        slweb_parse(buffer, output, TRUE, FALSE);
+        result = slweb_parse(buffer, output, TRUE, FALSE);
 
-        exit(0);
+        free(input_filename);
+        free(buffer);
+        exit(result);
     }
     else
-        exit(error(1, (uint8_t*)"Fork failed\n"));
+        exit(error(1, (uint8_t*)"Fork failed"));
+
 
     return 0;
 }
@@ -658,10 +701,7 @@ filter_slw(const struct dirent* node)
 
     if (slw_len >= node_len)
         return 0;
-
-    return (!strcmp(substr(node->d_name, 
-                    node_len - slw_len,
-                    node_len), ".slw"));
+    return !strcmp(node->d_name + strlen(node->d_name) - slw_len, ".slw");
 }
 
 int 
@@ -696,7 +736,7 @@ process_incdir_subdir(const char* subdirname, FILE* output, BOOL details_open,
                 &reverse_alphacompare)) < 0)
     {
         perror("scandir");
-        exit(error(errno, (uint8_t*)"incdir_subdir: scandir error\n"));
+        exit(error(errno, (uint8_t*)"incdir_subdir: scandir error"));
     }
 
     pnamelist = namelist;
@@ -711,32 +751,44 @@ process_incdir_subdir(const char* subdirname, FILE* output, BOOL details_open,
             wait(&pstatus);
         else if (pid == 0)
         {
-            strncpy(basedir, abs_subdirname, strlen(abs_subdirname));
-            sprintf(input_filename, "%s/%s", abs_subdirname, 
+            set_basedir(abs_subdirname, &basedir, &basedir_size);
+            snprintf(input_filename, BUFSIZE, "%s/%s", abs_subdirname, 
                     (*pnamelist)->d_name);
 
-            FILE* input = NULL;
-            FILE* output = stdout;
-            uint8_t* buffer = NULL;
+            FILE* input        = NULL;
+            FILE* output       = stdout;
+            uint8_t* buffer    = NULL;
+            size_t buffer_size = 0;
+            int result         = 0;
 
-            read_file_into_buffer(&buffer, input_filename, &input_dirname, 
-                    &input);
+            read_file_into_buffer(&buffer, &buffer_size, input_filename, 
+                    &input_dirname, &input);
 
             free(links);
             CALLOC(links, KeyValue, 1)
             links->key = NULL;
             links->value = NULL;
+            links->value_size = 0;
             links_count = 0;
 
             /* First pass: read YAML, macros and links */
-            slweb_parse(buffer, output, TRUE, TRUE);
+            result = slweb_parse(buffer, output, TRUE, TRUE);
+
+            if (result)
+            {
+                free(buffer);
+                return result;
+            }
 
             /* Second pass: parse and output */
-            slweb_parse(buffer, output, TRUE, FALSE);
-            exit(0);
+            result = slweb_parse(buffer, output, TRUE, FALSE);
+
+            fflush(output);
+            free(buffer);
+            exit(result);
         }
         else
-            exit(error(1, (uint8_t*)"Fork failed\n"));
+            exit(error(1, (uint8_t*)"Fork failed"));
 
         pnamelist++;
         names_output++;
@@ -768,19 +820,19 @@ process_incdir(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links)
 
     arg = u8_strtok(NULL, (uint8_t*)" ", &saveptr);
     if (!arg)
-        exit(error(1, (uint8_t*)"incdir: Arguments required\n"));
+        exit(error(1, (uint8_t*)"incdir: Arguments required"));
 
     arg_len = u8_strlen(arg);
 
-    CALLOC(incdir, char, BUFSIZE)
     if (*arg != '"' || *(arg + arg_len - 1) != '"')
-        exit(error(1, (uint8_t*)"incdir: First argument not string\n"));
+        exit(error(1, (uint8_t*)"incdir: First argument not string"));
 
-    strncpy(incdir, (char*)(arg+1), arg_len-2);
+    incdir = strdup((char*)(arg+1));
+    *(incdir + strlen(incdir) - 1) = 0;
 
     arg = u8_strtok(NULL, (uint8_t*)" ", &saveptr);
     if (!arg)
-        exit(error(1, (uint8_t*)"incdir: Second argument required\n"));
+        exit(error(1, (uint8_t*)"incdir: Second argument required"));
 
     if (*arg == '=')
         macro_body = get_value(macros, macros_count, arg+1, NULL);
@@ -790,17 +842,17 @@ process_incdir(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links)
         while (parg && *parg)
         {
             if (*parg < '0' || *parg > '9')
-                exit(error(1, (uint8_t*)"incdir: Non-numeric argument\n"));
+                exit(error(1, (uint8_t*)"incdir: Non-numeric argument"));
             parg++;
         }
         num = strtol((char*)arg, NULL, 10);
         if (errno)
-            exit(error(errno, (uint8_t*)"incdir: Invalid num\n"));
+            exit(error(errno, (uint8_t*)"incdir: Invalid parameter 'num'"));
         arg = u8_strtok(NULL, (uint8_t*)" ", &saveptr);
         if (arg)
         {
             if (*arg != '=')
-                exit(error(1, (uint8_t*)"incdir: Third argument not macro\n"));
+                exit(error(1, (uint8_t*)"incdir: Third argument not macro"));
             macro_body = get_value(macros, macros_count, arg+1, NULL);
         }
     }
@@ -811,7 +863,7 @@ process_incdir(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links)
             &reverse_alphacompare) < 0)
     {
         perror("scandir");
-        exit(error(errno, (uint8_t*)"incdir: scandir error\n"));
+        exit(error(errno, (uint8_t*)"incdir: scandir '%s' error", incdir));
     }
 
     pnamelist = namelist;
@@ -861,13 +913,16 @@ process_timestamp(FILE* output, const char* link, uint8_t* permalink_macro,
                 {
                     if (*ptimestamp_format == 'd' 
                             || *ptimestamp_format == 'D')
-                        u8_strncat(formatted_date, day, u8_strlen(day));
+                        u8_strncat(formatted_date, day, 
+                                DATEBUFSIZE-u8_strlen(formatted_date-1));
                     else if (*ptimestamp_format == 'm' 
                             || *ptimestamp_format == 'M')
-                        u8_strncat(formatted_date, month, u8_strlen(month));
+                        u8_strncat(formatted_date, month, 
+                                DATEBUFSIZE-u8_strlen(formatted_date-1));
                     else if (*ptimestamp_format == 'y' 
                             || *ptimestamp_format == 'Y')
-                        u8_strncat(formatted_date, year, u8_strlen(year));
+                        u8_strncat(formatted_date, year, 
+                                DATEBUFSIZE-u8_strlen(formatted_date-1));
                     else
                         *(formatted_date + u8_strlen(formatted_date)) 
                             = *ptimestamp_format;
@@ -897,7 +952,7 @@ process_macro(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links,
     if (!end_tag)
     {
         if (state & ST_MACRO_BODY)
-            exit(error(1, (uint8_t*)"Can't nest macros\n"));
+            exit(error(1, (uint8_t*)"Macro undefined or nested"));
 
         BOOL seen = FALSE;
         uint8_t* macro_body = get_value(macros, macros_count, token+1,
@@ -924,10 +979,11 @@ process_macro(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links,
                     REALLOC(macros, macros_count * sizeof(KeyValue))
                     pmacros = macros + macros_count - 1;
                 }
-                CALLOC(pmacros->key, uint8_t, u8_strlen(token+1))
+                CALLOC(pmacros->key, uint8_t, KEYSIZE)
                 pmacros->seen = FALSE;
-                u8_strcpy(pmacros->key, token+1);
+                u8_strncpy(pmacros->key, token+1, KEYSIZE-1);
                 pmacros->value = NULL;
+                pmacros->value_size = 0;
             }
             state |= ST_MACRO_BODY;
         }
@@ -943,7 +999,7 @@ process_tag(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links,
         BOOL* skip_eol, BOOL end_tag)
 {
     if (!token || u8_strlen(token) < 1)
-        return warning(1, (uint8_t*)"Empty tag name\n");
+        return warning(1, (uint8_t*)"Empty tag name");
 
     if (!strcmp((char*)token, "git-log")
             && !read_yaml_macros_and_links)   /* {git-log} */
@@ -1079,8 +1135,8 @@ get_realpath(char** realpath, char* relativeto, char* path)
     FILE* cmd_output = NULL;
 
     CALLOC(command, uint8_t, BUFSIZE)
-    strcpy(*realpath, ".");
-    u8_snprintf(command, BUFSIZE, "realpath --relative-to=%s %s", 
+    strncpy(*realpath, ".", BUFSIZE-1);
+    u8_snprintf(command, BUFSIZE-1, "realpath --relative-to=%s %s", 
             relativeto, path);
 
     cmd_output = popen((char*)command, "r");
@@ -1097,13 +1153,13 @@ get_realpath(char** realpath, char* relativeto, char* path)
             if (eol)
                 *eol = '\0';
 
-            strcpy(*realpath, (char*)cmd_output_line);
+            strncpy(*realpath, (char*)cmd_output_line, BUFSIZE-1);
         }
         pclose(cmd_output);
         free(cmd_output_line);
     }
     else
-        warning(1, (uint8_t*)"get_realpath: Cannot popen\n");
+        warning(1, (uint8_t*)"get_realpath: Cannot popen");
 
     free(command);
 
@@ -1207,7 +1263,7 @@ begin_html_and_head(FILE* output)
 
     char* favicon = NULL;
     CALLOC(favicon, char, BUFSIZE)
-    sprintf(favicon, "%s/favicon.ico", basedir);
+    snprintf(favicon, BUFSIZE-1, "%s/favicon.ico", basedir);
     if (!access(favicon, R_OK))
         print_output(output, "<link rel=\"shortcut icon\" type=\"image/x-icon\""
                 " href=\"%s\" />\n", 
@@ -1253,8 +1309,8 @@ end_body_and_html(FILE* output)
 }
 
 int
-slweb_parse(uint8_t* buffer, FILE* output, 
-        BOOL body_only, BOOL read_yaml_macros_and_links)
+slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only, 
+        BOOL read_yaml_macros_and_links)
 {
     uint8_t* title                     = NULL;
     uint8_t* title_heading_level       = NULL;
@@ -1268,6 +1324,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
     uint8_t* token                     = NULL;
     uint8_t* ptoken                    = NULL;
     uint8_t* link_text                 = NULL;
+    size_t link_size                   = 0;
     uint8_t* link_macro                = NULL;
     UBYTE heading_level                = 0;
     BOOL end_tag                       = FALSE;
@@ -1278,16 +1335,16 @@ slweb_parse(uint8_t* buffer, FILE* output,
     BOOL processed_start_of_line       = FALSE;
 
     if (!buffer)
-        exit(error(1, (uint8_t*)"Empty buffer\n"));
+        exit(error(1, (uint8_t*)"Empty buffer"));
 
     if (!vars)
-        exit(error(EINVAL, (uint8_t*)"Invalid argument (vars)\n"));
+        exit(error(EINVAL, (uint8_t*)"Invalid argument (vars)"));
 
     if (!links)
-        exit(error(EINVAL, (uint8_t*)"Invalid argument (links)\n"));
+        exit(error(EINVAL, (uint8_t*)"Invalid argument (links)"));
 
     if (!macros)
-        exit(error(EINVAL, (uint8_t*)"Invalid argument (macros)\n"));
+        exit(error(EINVAL, (uint8_t*)"Invalid argument (macros)"));
 
     title = get_value(vars, vars_count, (uint8_t*)"title", NULL);
     title_heading_level = get_value(vars, vars_count,
@@ -1330,7 +1387,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
         CALLOC(real_link, char, BUFSIZE)
 
         if (ext_in_permalink && *ext_in_permalink != (ucs4_t)'0')
-            strncat(link, timestamp_output_ext, strlen(timestamp_output_ext));
+            strncat(link, timestamp_output_ext, BUFSIZE-strlen(link)-1);
 
         if (permalink_url)
             process_timestamp(output, (char*)permalink_url, permalink_macro,
@@ -1374,9 +1431,10 @@ slweb_parse(uint8_t* buffer, FILE* output,
             {
             case '-':
                 if (colno == 1 
-                        && !(state & (ST_MACRO_BODY | ST_PRE))
+                        && !(state & (ST_CODE | ST_MACRO_BODY | ST_PRE 
+                                | ST_YAML_VAL ))
                         && u8_strlen(pline) > 2
-                        && !strcmp(substr((char*)pline, 0, 3), "---"))
+                        && startswith((char*)pline, "---"))
                 {
                     state ^= ST_YAML;
 
@@ -1392,10 +1450,10 @@ slweb_parse(uint8_t* buffer, FILE* output,
                     colno++;
                 }
                 break;
-
             case ':':
                 if (state & ST_YAML
-                        && !(state & (ST_MACRO_BODY | ST_YAML_VAL))
+                        && !(state & (ST_CODE | ST_HEADING | ST_MACRO_BODY 
+                                | ST_PRE | ST_TAG | ST_YAML_VAL))
                         && read_yaml_macros_and_links)
                 {
                     *ptoken = '\0';
@@ -1404,12 +1462,13 @@ slweb_parse(uint8_t* buffer, FILE* output,
 
                     if (vars_count > 1)
                     {
-                        REALLOC(vars, vars_count * sizeof(KeyValue))
+                        REALLOCARRAY(vars, KeyValue, vars_count)
                         pvars = vars + vars_count - 1;
                     }
-                    CALLOC(pvars->key, uint8_t, u8_strlen(token)+1)
-                    u8_strcpy(pvars->key, token);
+                    CALLOC(pvars->key, uint8_t, KEYSIZE)
+                    u8_strncpy(pvars->key, token, KEYSIZE-1);
                     pvars->value = NULL;
+                    pvars->value_size = 0;
 
                     state |= ST_YAML_VAL;
                     *token = '\0';
@@ -1439,7 +1498,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
 
                 if (colno == 1 
                         && u8_strlen(pline) > 2
-                        && !strcmp(substr((char*)pline, 0, 3), "```"))
+                        && startswith((char*)pline, "```"))
                 {
                     state ^= ST_PRE;
                     
@@ -1454,7 +1513,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                     pline += 3;
                     colno += 3;
                 }
-                else if (!(state & (ST_TAG | ST_HEADING | ST_YAML | ST_PRE)))
+                else if (!(state & (ST_HEADING | ST_PRE | ST_TAG | ST_YAML)))
                 {
                     /* Handle ` within link text specially */
                     if (state & ST_LINK)
@@ -1470,7 +1529,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
 
                         if (token_len + tag_len < BUFSIZE)
                         {
-                            u8_strncat(token, tag, tag_len);
+                            u8_strncat(token, tag, BUFSIZE-token_len-1);
                             ptoken += tag_len;
                         }
                     }
@@ -1505,15 +1564,8 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 break;
 
             case '#':
-                if (state & ST_MACRO_BODY)
-                {
-                    *ptoken++ = *pline++;
-                    colno++;
-                    break;
-                }
-
                 if (colno == 1
-                        && !(state & (ST_PRE | ST_YAML)))
+                        && !(state & (ST_CODE | ST_MACRO_BODY | ST_PRE | ST_YAML)))
                 {
                     state |= ST_HEADING;
                     heading_level = 1;
@@ -1536,8 +1588,8 @@ slweb_parse(uint8_t* buffer, FILE* output,
 
             case '_':
                 if (read_yaml_macros_and_links
-                        || state & (ST_MACRO_BODY | ST_TAG | ST_PRE 
-                            | ST_CODE))
+                        || state & (ST_CODE | ST_HEADING | ST_HTML_TAG 
+                            | ST_MACRO_BODY | ST_PRE | ST_TAG | ST_YAML))
                 {
                     *ptoken++ = *pline++;
                     colno++;
@@ -1560,7 +1612,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
 
                         if (token_len + tag_len < BUFSIZE)
                         {
-                            u8_strncat(token, tag, tag_len);
+                            u8_strncat(token, tag, BUFSIZE-token_len-1);
                             ptoken += tag_len;
                         }
                     }
@@ -1602,7 +1654,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
 
                         if (token_len + tag_len < BUFSIZE)
                         {
-                            u8_strncat(token, tag, tag_len);
+                            u8_strncat(token, tag, BUFSIZE-token_len-1);
                             ptoken += tag_len;
                         }
                     }
@@ -1632,8 +1684,8 @@ slweb_parse(uint8_t* buffer, FILE* output,
 
             case '*':
                 if (read_yaml_macros_and_links
-                        || state & (ST_MACRO_BODY | ST_TAG | ST_PRE 
-                            | ST_CODE))
+                        || state & (ST_CODE | ST_HEADING | ST_HTML_TAG 
+                            | ST_MACRO_BODY | ST_PRE | ST_YAML))
                 {
                     *ptoken++ = *pline++;
                     colno++;
@@ -1656,7 +1708,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
 
                         if (token_len + tag_len < BUFSIZE)
                         {
-                            u8_strncat(token, tag, tag_len);
+                            u8_strncat(token, tag, BUFSIZE-token_len-1);
                             ptoken += tag_len;
                         }
                     }
@@ -1698,7 +1750,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
 
                         if (token_len + tag_len < BUFSIZE)
                         {
-                            u8_strncat(token, tag, tag_len);
+                            u8_strncat(token, tag, BUFSIZE-token_len-1);
                             ptoken += tag_len;
                         }
                     }
@@ -1738,7 +1790,8 @@ slweb_parse(uint8_t* buffer, FILE* output,
                         && *(pline+1) == ' ')
                 {
                     *ptoken = '\0';
-                    u8_strncat(ptoken, (uint8_t*)"<br />", strlen("<br />"));
+                    u8_strncat(ptoken, (uint8_t*)"<br />", 
+                            BUFSIZE-u8_strlen(token)-1);
                     ptoken += strlen("<br />");
                     pline++;
                     colno++;
@@ -1746,7 +1799,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 else if (state & ST_LINK_MACRO)
                 {
                     *ptoken = '\0';
-                    u8_strcpy(link_macro, token);
+                    u8_strncpy(link_macro, token, BUFSIZE-1);
                     *token = '\0';
                     ptoken = token;
                     state &= ~ST_LINK_MACRO;
@@ -1759,8 +1812,8 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 break;
 
             case '{':
-                if (state & (ST_PRE | ST_CODE | ST_YAML | ST_YAML_VAL 
-                            | ST_HEADING))
+                if (state & (ST_CODE | ST_HEADING | ST_PRE | ST_YAML 
+                            | ST_YAML_VAL))
                 {
                     *ptoken++ = *pline++;
                     colno++;
@@ -1779,17 +1832,18 @@ slweb_parse(uint8_t* buffer, FILE* output,
                         {
                             size_t value_len = u8_strlen(pmacros->value);
 
-                            if (sizeof(pmacros->value) < value_len + token_len + 1)
+                            if (pmacros->value_size < value_len + token_len + 1)
                             {
-                                REALLOC(pmacros->value, sizeof(pmacros->value) 
-                                        + BUFSIZE * sizeof(uint8_t))
+                                pmacros->value_size += token_len;
+                                REALLOC(pmacros->value, pmacros->value_size)
                             }
-                            u8_strncat(pmacros->value, token, token_len);
+                            u8_strncat(pmacros->value, token, pmacros->value_size-1);
                         }
                         else
                         {
-                            CALLOC(pmacros->value, uint8_t, BUFSIZE)
-                            u8_strcpy(pmacros->value, token);
+                            pmacros->value_size = token_len+1;
+                            CALLOC(pmacros->value, uint8_t, pmacros->value_size)
+                            u8_strncpy(pmacros->value, token, pmacros->value_size-1);
                         }
                     }
                 }
@@ -1816,7 +1870,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 break;
 
             case '/':
-                if (state & (ST_PRE | ST_CODE | ST_HEADING))
+                if (state & (ST_CODE | ST_PRE | ST_HEADING | ST_YAML_VAL))
                 {
                     *ptoken++ = *pline++;
                     colno++;
@@ -1833,7 +1887,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 break;
 
             case '}':
-                if (state & (ST_PRE | ST_CODE | ST_HEADING))
+                if (state & (ST_CODE | ST_PRE | ST_HEADING | ST_YAML_VAL))
                 {
                     *ptoken++ = *pline++;
                     colno++;
@@ -1854,7 +1908,29 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 colno++;
                 break;
 
+            case '<':
+                if (state & (ST_CODE | ST_PRE))
+                {
+                    size_t lt_len = u8_strlen((uint8_t*)"&lt;");
+                    u8_strncat(ptoken, (uint8_t*)"&lt;", 
+                            BUFSIZE-(ptoken-token)-1);
+                    ptoken += lt_len;
+                    pline++;
+                    colno++;
+                    break;
+                }
+
+                state |= ST_HTML_TAG;
+                *ptoken++ = *pline++;
+                colno++;
+                break;
+
             case '>':
+                if (state & ST_HTML_TAG)
+                {
+                    state &= ~ST_HTML_TAG;
+                }
+
                 if (state & ST_MACRO_BODY)
                 {
                     *ptoken++ = *pline++;
@@ -1863,7 +1939,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 }
 
                 if (!read_yaml_macros_and_links
-                        && !(state & (ST_PRE | ST_HEADING))
+                        && !(state & (ST_CODE | ST_HEADING | ST_PRE))
                         && colno == 1)
                 {
                     if (!read_yaml_macros_and_links 
@@ -1883,8 +1959,8 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 break;
 
             case '!':
-                if (state & (ST_MACRO_BODY | ST_PRE | ST_HEADING | ST_CODE
-                            | ST_LINK))
+                if (state & (ST_CODE | ST_HEADING | ST_LINK | ST_MACRO_BODY 
+                            | ST_PRE))
                 {
                     *ptoken++ = *pline++;
                     colno++;
@@ -1913,7 +1989,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 break;
 
             case '=':
-                if (state & (ST_MACRO_BODY | ST_PRE | ST_CODE | ST_HEADING
+                if (state & (ST_CODE | ST_HEADING | ST_MACRO_BODY | ST_PRE
                             | ST_TAG))
                 {
                     *ptoken++ = *pline++;
@@ -1935,7 +2011,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 break;
 
             case '[':
-                if (state & (ST_MACRO_BODY | ST_PRE | ST_HEADING | ST_CODE))
+                if (state & (ST_CODE | ST_HEADING | ST_MACRO_BODY | ST_PRE))
                 {
                     *ptoken++ = *pline++;
                     colno++;
@@ -1965,7 +2041,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 break;
 
             case '(':
-                if (state & (ST_MACRO_BODY | ST_PRE | ST_CODE | ST_HEADING))
+                if (state & (ST_CODE | ST_HEADING | ST_MACRO_BODY | ST_PRE))
                     *ptoken++ = *pline;
                 else if (state & ST_LINK)
                 {
@@ -1978,7 +2054,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
 
                     if (token_len + tag_len < BUFSIZE)
                     {
-                        u8_strncat(token, tag, tag_len);
+                        u8_strncat(token, tag, BUFSIZE-token_len-1);
                         ptoken += tag_len;
                     }
 
@@ -2005,7 +2081,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
 
                         if (token_len + tag_len < BUFSIZE)
                         {
-                            u8_strncat(token, tag, tag_len);
+                            u8_strncat(token, tag, BUFSIZE-token_len-1);
                             ptoken += tag_len;
                         }
                         state &= ~ST_LINK_SPAN;
@@ -2036,7 +2112,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 break;
 
             case ']':
-                if (state & (ST_MACRO_BODY | ST_PRE | ST_CODE))
+                if (state & (ST_CODE | ST_HEADING | ST_MACRO_BODY | ST_PRE))
                 {
                     *ptoken++ = *pline++;
                     colno++;
@@ -2069,6 +2145,7 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 }
                 else if (u8_strlen(pline) > 1)
                 {
+                    size_t token_len = 0;
                     switch (*(pline+1))
                     {
                         case ':':
@@ -2076,12 +2153,13 @@ slweb_parse(uint8_t* buffer, FILE* output,
 
                             if (links_count > 1)
                             {
-                                REALLOC(links, links_count * sizeof(KeyValue))
+                                REALLOCARRAY(links, KeyValue, links_count)
                                 plinks = links + links_count - 1;
                             }
-                            CALLOC(plinks->key, uint8_t, u8_strlen(token)+1)
-                            u8_strcpy(plinks->key, token);
+                            CALLOC(plinks->key, uint8_t, KEYSIZE)
+                            u8_strncpy(plinks->key, token, KEYSIZE-1);
                             plinks->value = NULL;
+                            plinks->value_size = 0;
                             pline += 2;
                             colno += 2;
                             while (pline && (*pline == ' ' || *pline == '\t'))
@@ -2096,15 +2174,21 @@ slweb_parse(uint8_t* buffer, FILE* output,
 
                         case '[':
                         case '(':
+                            token_len = u8_strlen(token);
                             if (link_text)
                             {
-                                size_t token_len = u8_strlen(token);
-                                if (token_len > u8_strlen(link_text))
-                                    REALLOC(link_text, token_len * sizeof(uint8_t))
+                                if (token_len > link_size)
+                                {
+                                    link_size = token_len+1;
+                                    REALLOC(link_text, link_size)
+                                }
                             }
                             else
-                                CALLOC(link_text, uint8_t, u8_strlen(token)+1)
-                            u8_strcpy(link_text, token);
+                            {
+                                link_size = token_len+1;
+                                CALLOC(link_text, uint8_t, link_size)
+                            }
+                            u8_strncpy(link_text, token, link_size-1);
                             pline += 2;
                             colno += 2;
                             *token = '\0';
@@ -2146,8 +2230,9 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 && (state & ST_YAML_VAL))
         {
             *ptoken = '\0';
-            CALLOC(pvars->value, uint8_t, u8_strlen(token)+1)
-            u8_strcpy(pvars->value, token);
+            pvars->value_size = u8_strlen(token)+1;
+            CALLOC(pvars->value, uint8_t, pvars->value_size)
+            u8_strncpy(pvars->value, token, pvars->value_size-1);
         }
         else 
         {
@@ -2167,17 +2252,21 @@ slweb_parse(uint8_t* buffer, FILE* output,
 
                             if (sizeof(pmacros->value) < value_len + token_len + 1)
                             {
-                                REALLOC(pmacros->value, sizeof(pmacros->value) 
-                                        + BUFSIZE * sizeof(uint8_t))
+                                pmacros->value_size += BUFSIZE;
+                                REALLOC(pmacros->value, pmacros->value_size)
                             }
-                            u8_strncat(pmacros->value, token, token_len);
-                            u8_strncat(pmacros->value, (uint8_t*)"\n", 1);
+                            u8_strncat(pmacros->value, token, 
+                                    pmacros->value_size-value_len-1);
+                            u8_strncat(pmacros->value, (uint8_t*)"\n", 
+                                    pmacros->value_size-u8_strlen(pmacros->value)-1);
                         }
                         else
                         {
-                            CALLOC(pmacros->value, uint8_t, BUFSIZE)
-                            u8_strcpy(pmacros->value, token);
-                            u8_strncat(pmacros->value, (uint8_t*)"\n", 1);
+                            pmacros->value_size = BUFSIZE;
+                            CALLOC(pmacros->value, uint8_t, pmacros->value_size)
+                            u8_strncpy(pmacros->value, token, pmacros->value_size-1);
+                            u8_strncat(pmacros->value, (uint8_t*)"\n", 
+                                    pmacros->value_size-u8_strlen(pmacros->value)-1);
                         }
                     }
                 }
@@ -2185,8 +2274,9 @@ slweb_parse(uint8_t* buffer, FILE* output,
                 {
                     if (read_yaml_macros_and_links)
                     {
-                        CALLOC(plinks->value, uint8_t, u8_strlen(token)+1)
-                        u8_strcpy(plinks->value, token);
+                        plinks->value_size = u8_strlen(token)+1;
+                        CALLOC(plinks->value, uint8_t, plinks->value_size)
+                        u8_strncpy(plinks->value, token, plinks->value_size-1);
                     }
                 }
                 else if (state & ST_HEADING)
@@ -2253,8 +2343,12 @@ slweb_parse(uint8_t* buffer, FILE* output,
     if (!read_yaml_macros_and_links && !body_only)
         end_body_and_html(output);
 
-    free(line);
+    if (link_text)
+        free(link_text);
+
+    free(link_macro);
     free(token);
+    free(line);
 
     return 0;
 }
@@ -2265,8 +2359,10 @@ main(int argc, char** argv)
     char* arg;
     Command cmd = CMD_NONE;
     BOOL body_only = FALSE;
+    int result = 0;
 
-    CALLOC(basedir, char, 2)
+    basedir_size = 2;
+    CALLOC(basedir, char, basedir_size)
     *basedir = '.';
 
     while ((arg = *++argv))
@@ -2286,11 +2382,10 @@ main(int argc, char** argv)
                     arg += strlen("body-only");
                     body_only = TRUE;
                 }
-                else if (!strcmp(substr(arg, 0, strlen("basedir")), 
-                            "basedir"))
+                else if (startswith(arg, "basedir"))
                 {
                     arg += strlen("basedir");
-                    result = set_basedir(arg, &basedir);
+                    result = set_basedir(arg, &basedir, &basedir_size);
                     if (result)
                         return result;
                 }
@@ -2298,7 +2393,7 @@ main(int argc, char** argv)
                     return usage();
                 else
                 {
-                    error(EINVAL, (uint8_t*)"Invalid argument: --%s\n", arg);
+                    error(EINVAL, (uint8_t*)"Invalid argument: --%s", arg);
                     return usage();
                 }
             }
@@ -2319,7 +2414,7 @@ main(int argc, char** argv)
                     cmd = CMD_VERSION;
                     break;
                 default:
-                    error(EINVAL, (uint8_t*)"Invalid argument: -%c\n", c);
+                    error(EINVAL, (uint8_t*)"Invalid argument: -%c", c);
                     return usage();
                 }
             }
@@ -2330,7 +2425,7 @@ main(int argc, char** argv)
 
             if (cmd == CMD_BASEDIR)
             {
-                result = set_basedir(arg, &basedir);
+                result = set_basedir(arg, &basedir, &basedir_size);
                 if (result)
                     return result;
             }
@@ -2341,7 +2436,7 @@ main(int argc, char** argv)
     }
 
     if (cmd == CMD_BASEDIR)
-        return error(1, (uint8_t*)"-d: Argument required\n");
+        return error(1, (uint8_t*)"-d: Argument required");
 
     if (cmd == CMD_VERSION)
         return version();
@@ -2349,19 +2444,22 @@ main(int argc, char** argv)
     FILE* input = NULL;
     FILE* output = stdout;
     uint8_t* buffer = NULL;
+    size_t buffer_size = 0;
 
     if (input_filename)
-        read_file_into_buffer(&buffer, input_filename, &input_dirname, &input);
+        read_file_into_buffer(&buffer, &buffer_size, input_filename, &input_dirname, &input);
     else
     {
         uint8_t* bufline = NULL;
         size_t buffer_len = 0;
+        size_t buffer_size = 0;
         size_t bufline_len = 0;
 
         input = stdin;
 
         CALLOC(bufline, uint8_t, BUFSIZE)
-        CALLOC(buffer, uint8_t, BUFSIZE)
+        buffer_size = BUFSIZE;
+        CALLOC(buffer, uint8_t, buffer_size)
 
         while (!feof(input))
         {
@@ -2372,9 +2470,12 @@ main(int argc, char** argv)
             if (eol)
                 *(eol+1) = '\0';
             bufline_len = u8_strlen(bufline);
-            if (buffer_len + bufline_len + 1 > sizeof(buffer))
-                REALLOC(buffer, sizeof(buffer) + BUFSIZE)
-            u8_strncat(buffer, bufline, bufline_len);
+            if (buffer_len + bufline_len + 1 > buffer_size)
+            {
+                buffer_size += BUFSIZE;
+                REALLOC(buffer, buffer_size)
+            }
+            u8_strncat(buffer, bufline, buffer_size-buffer_len-1);
             buffer_len += bufline_len;
         }
         free(bufline);
@@ -2383,19 +2484,32 @@ main(int argc, char** argv)
     CALLOC(vars, KeyValue, 1)
     vars->key = NULL;
     vars->value = NULL;
+    vars->value_size = 0;
 
     CALLOC(macros, KeyValue, 1)
     macros->key = NULL;
     macros->value = NULL;
+    macros->value_size = 0;
 
     CALLOC(links, KeyValue, 1)
     links->key = NULL;
     links->value = NULL;
+    links->value_size = 0;
 
     /* First pass: read YAML, macros and links */
-    slweb_parse(buffer, output, body_only, TRUE);
+    result = slweb_parse(buffer, output, body_only, TRUE);
+
+    if (result)
+    {
+        free(buffer);
+        return result;
+    }
 
     /* Second pass: parse and output */
-    return slweb_parse(buffer, output, body_only, FALSE);
+    result = slweb_parse(buffer, output, body_only, FALSE);
+
+    free(buffer);
+
+    return result;
 }
- 
+

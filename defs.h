@@ -42,10 +42,11 @@
 #define COPYRIGHTYEAR "2020, 2021"
 
 #define BUFSIZE       1024
+#define KEYSIZE       256
 #define DATEBUFSIZE   12
 
-const char* timestamp_format     = "d.m.y";
-const char* timestamp_output_ext = ".html";
+const char timestamp_format[]     = "d.m.y";
+const char timestamp_output_ext[] = ".html";
 
 typedef enum
 {
@@ -69,7 +70,8 @@ typedef struct
 {
     uint8_t* key;
     uint8_t* value;
-    BOOL seen;    /* for use with macros */
+    size_t   value_size;
+    BOOL     seen;    /* for use with macros */
 } KeyValue;
 
 #pragma GCC diagnostic push
@@ -96,11 +98,12 @@ const ULONG ST_IMAGE            = 1 << 14;
 const ULONG ST_IMAGE_SECOND_ARG = 1 << 15;
 const ULONG ST_MACRO_BODY       = 1 << 16;
 const ULONG ST_CSV_BODY         = 1 << 17;
+const ULONG ST_HTML_TAG         = 1 << 18;
 
-const UBYTE ST_CS_NONE         = 0;
-const UBYTE ST_CS_HEADER       = 1;
-const UBYTE ST_CS_REGISTER     = 1 << 2;
-const UBYTE ST_CS_QUOTE        = 1 << 3;
+const UBYTE ST_CS_NONE     = 0;
+const UBYTE ST_CS_HEADER   = 1;
+const UBYTE ST_CS_REGISTER = 1 << 2;
+const UBYTE ST_CS_QUOTE    = 1 << 3;
 #pragma GCC diagnostic pop
 
 #endif /* __DEFS_H */
