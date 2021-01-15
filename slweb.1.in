@@ -110,8 +110,15 @@ two*** of the ___same symbol___\fP should be avoided.
 .
 .IP \[bu]
 .BR Backticks .
-Text inside \fC`backticks`\fP will be put inside \fC<code></code>\fP (both
-backticks need to be on the same line).
+Text inside \fC`backticks`\fP will be put inside \fC<code></code>\fP. Text
+inside triple backticks (\fC```\fP) will be put inside \fC<pre></pre>\fP. Any
+\[lq]less-than\[rq] character will be converted to \fC&lt;\fP.
+.
+.IP \[bu]
+.BR "Keyboard tags" .
+Text inside \fC||double bars||\fP will be put inside \fC<kbd></kbd>\fP tags. As
+with backticks, any \[lq]less-than\[rq] character will be converted to
+\fC&lt;\fP.
 .
 .IP \[bu]
 .BR Blockquotes .
@@ -122,42 +129,73 @@ Multiple lines are supported.
 .BR Links .
 The construct \fC[A link](https://example.com)\fP will be converted into \fC<a
 href="https://example.com">A link</a>\fP.
+.
 .IP
 Special case is the form \fC[=somemacro Link title](https://anything)\fP which
 prepends the body of a macro
 .I somemacro
 into the \fC<a></a>\fP tag (here broken into multiple lines for clarity):
+.
 .CDS 8
 <a href="https://anything">
 <!-- contents of somemacro -->
 Link title</a>
 .CDE
+.
 .IP
 This can, for example, be used to add
 .SM SVG
 icons to links. See
 .BR Macros .
+.
 .IP
 Also, the form \fC[(Link title)](http://asite.com)\fP will surround the link
 title (text between \fC<a></a>\fP tags) with \fC<span></span>\fP, like so:
+.
 .CDS 8
 <a href="http://asite.com"><span>Link title</span></a>
 .CDE
+.
 .IP
 This allows for separate styling of link text. It can be combined with the
 macro-form:
+.
 .CDS 8
 [=somemacro (Link title)](http://asite.com)
 .CDE
+.
 .IP
 It will prepend the body of a macro
 .I somemacro
 outside of the \fC<span></span>\fP:
+.
 .CDS 8
 <a href="http://asite.com">
 <!-- contents of somemacro -->
 <span>Link title</span></a>
 .CDE
+.
+.IP \[bu]
+.BR Images .
+Similar to links, images can be added by using:
+.
+.CDS 8
+![Some title](/path/to/image.png)
+.CDE
+.
+.IP
+Which will produce:
+.
+.CDS 8
+<a href="/path/to/image.png" title="Some title" 
+    class="image" target="_blank"><img src="/path/to/image.png" 
+    alt="Some title" /></a>
+.CDE
+.
+.IP
+If the additional link is not desirable, it can be turned off by setting
+.B add-image-links
+to \[lq]0\[rq].
 .
 .IP \[bu]
 .BR "Line breaks" .
@@ -349,6 +387,12 @@ about the current commit would be impossible).
 .SS Special YAML variables
 .
 .IP \[bu] 4
+.BR add-image-links .
+If set to \[lq]0\[rq], links around images will not be added (otherwise they
+will by default, see
+.BR Images ).
+.
+.IP \[bu]
 .BR csv-delimiter .
 Changes the delimiter used for 
 .I .csv

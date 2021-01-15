@@ -99,6 +99,7 @@ const ULONG ST_IMAGE_SECOND_ARG = 1 << 15;
 const ULONG ST_MACRO_BODY       = 1 << 16;
 const ULONG ST_CSV_BODY         = 1 << 17;
 const ULONG ST_HTML_TAG         = 1 << 18;
+const ULONG ST_KBD              = 1 << 19;
 
 const UBYTE ST_CS_NONE     = 0;
 const UBYTE ST_CS_HEADER   = 1;
