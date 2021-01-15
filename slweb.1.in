@@ -332,7 +332,7 @@ nor can they contain macro calls, and doing so will produce an error.
 .
 .IP \[bu]
 .BR "Subdirectory inclusion (blogging directive)" .
-The command \fC{incdir "\fIdirname\rC" \fInum\fC =\fImacroname\fC}\fP
+The command \fC{incdir "\fIdirname\fC" \fInum\fC =\fImacroname\fC}\fP
 .RI ( num
 and
 .I macroname
