@@ -165,7 +165,7 @@ set_basedir(char* arg, char** basedir, size_t* basedir_size)
         REALLOC(*basedir, *basedir_size)
     }
     strncpy(*basedir, arg, *basedir_size-1);
-    *(basedir + arg_len) = 0;
+    *(*basedir + arg_len) = 0;
     basedir_len = strlen(*basedir);
     if (*(*basedir + basedir_len - 1) == '/')
         *(*basedir + basedir_len - 1) = 0;
@@ -666,6 +666,40 @@ process_include(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links)
         exit(error(1, (uint8_t*)"Fork failed"));
 
 
+    return 0;
+}
+
+int
+process_list_start(FILE* output)
+{
+    fprintf(output, "<ul>");
+    return 0;
+}
+
+int
+process_list_item_start(FILE* output)
+{
+    fprintf(output, "\n<li><p>");
+    state |= ST_PARA_OPEN;
+    return 0;
+}
+
+int
+process_list_item_end(FILE* output)
+{
+    if (state & ST_PARA_OPEN)
+    {
+        state &= ~ST_PARA_OPEN;
+        fprintf(output, "</p>");
+    }
+    fprintf(output, "</li>");
+    return 0;
+}
+
+int
+process_list_end(FILE* output)
+{
+    fprintf(output, "</ul>\n");
     return 0;
 }
 
@@ -1223,16 +1257,29 @@ process_image(uint8_t* image_text, uint8_t* image_id, FILE* output, BOOL add_lin
 }
 
 int
-process_line_start(BOOL first_line_in_doc,
+process_line_start(uint8_t* line, BOOL first_line_in_doc,
         BOOL previous_line_blank, BOOL processed_start_of_line,
-        BOOL read_yaml_macros_and_links, FILE* output,
+        BOOL read_yaml_macros_and_links,  BOOL list_para,
+        BOOL list_item, FILE* output,
         uint8_t** token,
         uint8_t** ptoken)
 {
     if ((first_line_in_doc || previous_line_blank)
             && !processed_start_of_line
-            && !(state & (ST_PRE | ST_BLOCKQUOTE)))
+            && !(state & (ST_BLOCKQUOTE | ST_PRE)))
     {
+        if (state & ST_LIST)
+        {
+            if (!list_para)
+            {
+                state &= ~ST_LIST;
+                if (!read_yaml_macros_and_links)
+                {
+                    process_list_item_end(output);
+                    process_list_end(output);
+                }
+            }
+        }
         if (!read_yaml_macros_and_links)
             print_output(output, "<p>");
         state |= ST_PARA_OPEN;
@@ -1241,23 +1288,25 @@ process_line_start(BOOL first_line_in_doc,
 }
 
 int
-process_text_token(BOOL first_line_in_doc,
+process_text_token(uint8_t* line, BOOL first_line_in_doc,
         BOOL previous_line_blank,
         BOOL processed_start_of_line,
-        BOOL read_yaml_macros_and_links,
+        BOOL read_yaml_macros_and_links, BOOL list_para,
+        BOOL list_item,
         FILE* output,
         uint8_t** token,
         uint8_t** ptoken,
         BOOL add_enclosing_paragraph)
 {
-    if (!read_yaml_macros_and_links && !(state & ST_YAML))
+    if (!(state & ST_YAML))
     {
         if (add_enclosing_paragraph)
-            process_line_start(first_line_in_doc, previous_line_blank,
+            process_line_start(line, first_line_in_doc, previous_line_blank,
                     processed_start_of_line, read_yaml_macros_and_links,
-                    output, token, ptoken);
+                    list_para, list_item, output, token, ptoken);
         **ptoken = 0;
-        if (**token && !(state & ST_MACRO_BODY))
+        if (**token && !read_yaml_macros_and_links 
+                && !(state & ST_MACRO_BODY))
             print_output(output, "%s", *token);
     }
     **token = 0;
@@ -1353,6 +1402,8 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
     BOOL previous_line_blank           = FALSE;
     BOOL processed_start_of_line       = FALSE;
     BOOL add_links                     = TRUE;
+    BOOL list_para                     = FALSE;
+    BOOL list_item                     = FALSE;
 
     if (!buffer)
         exit(error(1, (uint8_t*)"Empty buffer"));
@@ -1446,15 +1497,21 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
         colno = 1;
         processed_start_of_line = FALSE;
         skip_eol = FALSE;
+        /*list_item = FALSE;*/
+        list_para = FALSE;
 
         while (pline && *pline)
         {
             switch (*pline)
             {
             case '-':
-                if (colno == 1 
-                        && !(state & (ST_CODE | ST_MACRO_BODY | ST_PRE 
-                                | ST_YAML_VAL ))
+                if (state & (ST_CODE | ST_MACRO_BODY | ST_PRE 
+                                | ST_YAML_VAL))
+                {
+                    *ptoken++ = *pline++;
+                    colno++;
+                }
+                else if (colno == 1 
                         && u8_strlen(pline) > 2
                         && startswith((char*)pline, "---"))
                 {
@@ -1465,6 +1522,27 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
 
                     pline += 3;
                     colno += 3;
+                }
+                else if (colno == 1 
+                        && u8_strlen(pline) > 1
+                        && *(pline+1) == ' ')
+                {
+                    if (!read_yaml_macros_and_links)
+                    {
+                        if (!(state & ST_LIST))
+                            process_list_start(output);
+                        else
+                            process_list_item_end(output);
+                        process_list_item_start(output);
+                    }
+
+                    processed_start_of_line = TRUE;
+                    skip_eol = FALSE;
+
+                    state |= ST_LIST;
+
+                    pline += 2;
+                    colno += 2;
                 }
                 else
                 {
@@ -1558,10 +1636,11 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                     else
                     {
                         /* Output existing text up to ` */
-                        process_text_token(first_line_in_doc,
+                        process_text_token(line, first_line_in_doc,
                                 previous_line_blank,
                                 processed_start_of_line,
                                 read_yaml_macros_and_links,
+                                list_para, list_item,
                                 output,
                                 &token,
                                 &ptoken,
@@ -1641,10 +1720,11 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                     else
                     {
                         /* Output existing text up to __ */
-                        process_text_token(first_line_in_doc,
+                        process_text_token(line, first_line_in_doc,
                                 previous_line_blank,
                                 processed_start_of_line,
                                 read_yaml_macros_and_links,
+                                list_para, list_item,
                                 output,
                                 &token,
                                 &ptoken,
@@ -1683,10 +1763,11 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                     else
                     {
                         /* Output existing text up to _ */
-                        process_text_token(first_line_in_doc,
+                        process_text_token(line, first_line_in_doc,
                                 previous_line_blank,
                                 processed_start_of_line,
                                 read_yaml_macros_and_links,
+                                list_para, list_item,
                                 output,
                                 &token,
                                 &ptoken,
@@ -1743,10 +1824,11 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                     else
                     {
                         /* Output existing text up to * */
-                        process_text_token(first_line_in_doc,
+                        process_text_token(line, first_line_in_doc,
                                 previous_line_blank,
                                 processed_start_of_line,
                                 read_yaml_macros_and_links,
+                                list_para, list_item,
                                 output,
                                 &token,
                                 &ptoken,
@@ -1785,10 +1867,11 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                     else
                     {
                         /* Output existing text up to * */
-                        process_text_token(first_line_in_doc,
+                        process_text_token(line, first_line_in_doc,
                                 previous_line_blank,
                                 processed_start_of_line,
                                 read_yaml_macros_and_links,
+                                list_para, list_item,
                                 output,
                                 &token,
                                 &ptoken,
@@ -1807,10 +1890,31 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 break;
 
             case ' ':
-                if (state & ST_MACRO_BODY)
+                if (state & (ST_CODE | ST_MACRO_BODY | ST_PRE
+                            | ST_YAML_VAL))
                 {
                     *ptoken++ = *pline++;
                     colno++;
+                    break;
+                }
+
+                if (colno == 1
+                        && u8_strlen(pline) > 1
+                        && startswith((char*)pline, "    "))
+                {
+                    list_para = TRUE;
+                    process_text_token(line, first_line_in_doc,
+                            previous_line_blank,
+                            processed_start_of_line,
+                            read_yaml_macros_and_links,
+                            list_para, list_item,
+                            output,
+                            &token,
+                            &ptoken,
+                            TRUE);
+                    processed_start_of_line = TRUE;
+                    pline += 4;
+                    colno += 4;
                     break;
                 }
 
@@ -1879,10 +1983,11 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 else
                 {
                     /* Output existing text up to { */
-                    process_text_token(first_line_in_doc,
+                    process_text_token(line, first_line_in_doc,
                             previous_line_blank,
                             processed_start_of_line,
                             read_yaml_macros_and_links,
+                            list_para, list_item,
                             output,
                             &token,
                             &ptoken,
@@ -1916,22 +2021,26 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 break;
 
             case '}':
-                if (state & (ST_CODE | ST_PRE | ST_HEADING | ST_YAML_VAL))
+                if (state & (ST_CODE | ST_PRE | ST_HEADING | ST_YAML
+                            | ST_YAML_VAL))
                 {
                     *ptoken++ = *pline++;
                     colno++;
                     break;
                 }
 
-                state &= ~ST_TAG;
-                *ptoken = 0;
+                if (state & ST_TAG)
+                {
+                    state &= ~ST_TAG;
+                    *ptoken = 0;
 
-                process_tag(token, output, read_yaml_macros_and_links,
-                        &skip_eol, end_tag);
+                    process_tag(token, output, read_yaml_macros_and_links,
+                            &skip_eol, end_tag);
 
-                *token = 0;
-                ptoken = token;
-                end_tag = FALSE;
+                    *token = 0;
+                    ptoken = token;
+                    end_tag = FALSE;
+                }
 
                 pline++;
                 colno++;
@@ -1970,10 +2079,11 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                     else
                     {
                         /* Output existing text up to || */
-                        process_text_token(first_line_in_doc,
+                        process_text_token(line, first_line_in_doc,
                                 previous_line_blank,
                                 processed_start_of_line,
                                 read_yaml_macros_and_links,
+                                list_para, list_item,
                                 output,
                                 &token,
                                 &ptoken,
@@ -2118,10 +2228,11 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
 
                 if (*token)
                     /* Output existing text up to [ */
-                    process_text_token(first_line_in_doc,
+                    process_text_token(line, first_line_in_doc,
                             previous_line_blank,
                             processed_start_of_line,
                             read_yaml_macros_and_links,
+                            list_para, list_item,
                             output,
                             &token,
                             &ptoken,
@@ -2390,23 +2501,39 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                     heading_level = 0;
                 }
                 else 
-                    process_text_token(first_line_in_doc,
+                    process_text_token(line, first_line_in_doc,
                             previous_line_blank,
                             processed_start_of_line,
                             read_yaml_macros_and_links,
+                            list_para, list_item,
                             output,
                             &token,
                             &ptoken,
                             TRUE);
             }
 
-            if ((state & ST_PARA_OPEN)
-                        && !(state & (ST_PRE | ST_LINK_SECOND_ARG))
+            if (!(state & (ST_PRE | ST_LINK_SECOND_ARG))
                         && (!*pbuffer || *pbuffer == '\n'))
             {
-                if (!read_yaml_macros_and_links)
-                    print_output(output, "</p>");
-                state &= ~ST_PARA_OPEN;
+                if (state & ST_PARA_OPEN)
+                {
+                    if (!read_yaml_macros_and_links)
+                        print_output(output, "</p>");
+                    if (state & ST_LIST)
+                        skip_eol = TRUE;
+                    state &= ~ST_PARA_OPEN;
+                }
+
+                if (!*pbuffer && (state & ST_LIST))
+                {
+                    if (!read_yaml_macros_and_links)
+                    {
+                        process_list_item_end(output);
+                        process_list_end(output);
+                    }
+                    state &= ~ST_LIST;
+                }
+
             }
 
             if (state & ST_BLOCKQUOTE 

@@ -91,15 +91,16 @@ are using a minimal subset of Markdown with added directives.
 .
 .SS Supported Markdown features
 .
-.IP \[bu] 4
-.BR Paragraphs .
-Text surrounded by newlines will be put inside \fC<p></p>\fP tags.
+.IP \[bu]
+.BR Backticks .
+Text inside \fC`backticks`\fP will be put inside \fC<code></code>\fP. Text
+inside triple backticks (\fC```\fP) will be put inside \fC<pre></pre>\fP. Any
+\[lq]less-than\[rq] character will be converted to \fC&lt;\fP.
 .
 .IP \[bu]
-.BR Headings .
-A line starting with \fC#\fP followed by space will be put inside
-\fC<h?></h?>\fP, where \fC?\fP stands for 1-4, depending on the number of
-hash signs.
+.BR Blockquotes .
+Starting the line with \fC>\fP will surround it with a \fC<blockquote>\fP tag.
+Multiple lines are supported.
 .
 .IP \[bu]
 .BR Bold/italic .
@@ -109,10 +110,34 @@ underlines__\fP will be put inside \fC<strong></strong>\fP. \fC***More than
 two*** of the ___same symbol___\fP should be avoided.
 .
 .IP \[bu]
-.BR Backticks .
-Text inside \fC`backticks`\fP will be put inside \fC<code></code>\fP. Text
-inside triple backticks (\fC```\fP) will be put inside \fC<pre></pre>\fP. Any
-\[lq]less-than\[rq] character will be converted to \fC&lt;\fP.
+.BR Headings .
+A line starting with \fC#\fP followed by space will be put inside
+\fC<h?></h?>\fP, where \fC?\fP stands for 1-4, depending on the number of
+hash signs.
+.
+.IP \[bu]
+.BR Images .
+Similar to links (see
+.BR Links ), 
+images can be added by using:
+.
+.CDS 8
+![Some title](/path/to/image.png)
+.CDE
+.
+.IP
+Which will produce:
+.
+.CDS 8
+<a href="/path/to/image.png" title="Some title" 
+    class="image" target="_blank"><img src="/path/to/image.png" 
+    alt="Some title" /></a>
+.CDE
+.
+.IP
+If the additional link is not desirable, it can be turned off by setting
+.B add-image-links
+to \[lq]0\[rq].
 .
 .IP \[bu]
 .BR "Keyboard tags" .
@@ -121,9 +146,8 @@ with backticks, any \[lq]less-than\[rq] character will be converted to
 \fC&lt;\fP.
 .
 .IP \[bu]
-.BR Blockquotes .
-Starting the line with \fC>\fP will surround it with a \fC<blockquote>\fP tag.
-Multiple lines are supported.
+.BR "Line breaks" .
+Two spaces followed by a newline will become \fC<br />\fP.
 .
 .IP \[bu]
 .BR Links .
@@ -176,30 +200,64 @@ outside of the \fC<span></span>\fP:
 .CDE
 .
 .IP \[bu]
-.BR Images .
-Similar to links, images can be added by using:
+.BR Lists .
+Lines starting with a dash (\fC\-\fP) will start an unordered list (if used for
+the first time) and start a list item. Input:
 .
 .CDS 8
-![Some title](/path/to/image.png)
+Colors are:
+
+- Red
+- Green
+- Blue
+
+and so on.
 .CDE
 .
 .IP
-Which will produce:
+will produce:
 .
 .CDS 8
-<a href="/path/to/image.png" title="Some title" 
-    class="image" target="_blank"><img src="/path/to/image.png" 
-    alt="Some title" /></a>
+<p>Colors are:</p>
+
+<ul>
+<li><p>Red
+</p></li>
+<li><p>Green
+</p></li>
+<li><p>Blue</p>
+</li></ul>
+<p>And so on.</p>
 .CDE
 .
 .IP
-If the additional link is not desirable, it can be turned off by setting
-.B add-image-links
-to \[lq]0\[rq].
+Indenting a line after a blank line with four spaces will create a paragraph
+within the list item, otherwise it will end the list:
 .
-.IP \[bu]
-.BR "Line breaks" .
-Two spaces followed by a newline will become \fC<br />\fP.
+.CDS 8
+- This is a text inside a list item.
+
+    Remarkably, this paragraph is as well.
+- This is already a second item.
+
+This is after the list.
+.CDE
+.
+.IP
+will produce:
+.
+.CDS 8
+<ul>
+<li><p>This is a text inside a list item.</p>
+<p>Remarkably, this paragraph is as well.
+</p></li>
+<li><p>This is already a second item.</p></li></ul>
+<p>This is after the list.</p>
+.CDE
+.
+.IP \[bu] 4
+.BR Paragraphs .
+Text surrounded by newlines will be put inside \fC<p></p>\fP tags.
 .
 .SS Directives
 .

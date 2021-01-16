@@ -38,7 +38,7 @@
 #include <uniwidth.h>
 
 #define PROGRAMNAME   "slweb"
-#define VERSION       "0.3.4"
+#define VERSION       "0.3.5"
 #define COPYRIGHTYEAR "2020, 2021"
 
 #define BUFSIZE       1024
@@ -100,6 +100,7 @@ const ULONG ST_MACRO_BODY       = 1 << 16;
 const ULONG ST_CSV_BODY         = 1 << 17;
 const ULONG ST_HTML_TAG         = 1 << 18;
 const ULONG ST_KBD              = 1 << 19;
+const ULONG ST_LIST             = 1 << 20;
 
 const UBYTE ST_CS_NONE     = 0;
 const UBYTE ST_CS_HEADER   = 1;
