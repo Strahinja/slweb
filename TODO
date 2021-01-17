@@ -1,18 +1,6 @@
                                       TODO
                                       ====
 
-    [x] Add csv templating directive
-
-        [x] Move fprintf(output...) to a separate function
-
-        [x] Record that function's output from {csv}..{/csv} into 
-            "capture blocks" - no need to do that for all of them,
-            only the last one
-
-        [x] Open CSV, for each row in CSV skipping the first one
-            output the current capture block substituting the variable
-            escapes $1..$9 (keeping it simple with 1-digit) with row fields;
-            don't skip header line
-
-        [x] Update documentation
+        [ ] keep-macros variable: when present in an included file, macros from
+            child process get added to the parent
 
