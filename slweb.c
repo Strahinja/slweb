@@ -1613,10 +1613,10 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                     /* Skip the rest of the line (language) */
                     pline = NULL;
                 }
-                else if (!(state & (ST_HEADING | ST_PRE | ST_TAG | ST_YAML)))
+                else if (!(state & (ST_PRE | ST_TAG | ST_YAML)))
                 {
-                    /* Handle ` within link text specially */
-                    if (state & ST_LINK)
+                    /* Handle ` within headings and link text specially */
+                    if (state & (ST_HEADING | ST_LINK))
                     {
                         uint8_t* tag = state & ST_CODE
                                 ? (uint8_t*)"</code>"
@@ -1689,7 +1689,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
 
             case '_':
                 if (read_yaml_macros_and_links
-                        || state & (ST_CODE | ST_HEADING | ST_HTML_TAG 
+                        || state & (ST_CODE | ST_HTML_TAG 
                             | ST_MACRO_BODY | ST_PRE | ST_TAG | ST_YAML))
                 {
                     *ptoken++ = *pline++;
@@ -1699,8 +1699,8 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
 
                 if (u8_strlen(pline) > 1 && *(pline+1) == '_')
                 {
-                    /* Handle __ within link text specially */
-                    if (state & ST_LINK)
+                    /* Handle __ within headings and link text specially */
+                    if (state & (ST_HEADING | ST_LINK))
                     {
                         uint8_t* tag = state & ST_BOLD
                                 ? (uint8_t*)"</strong>"
@@ -1742,8 +1742,8 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 }
                 else
                 {
-                    /* Handle _ within link text specially */
-                    if (state & ST_LINK)
+                    /* Handle _ within headings and link text specially */
+                    if (state & (ST_HEADING | ST_LINK))
                     {
                         uint8_t* tag = state & ST_ITALIC
                                 ? (uint8_t*)"</em>"
@@ -1787,7 +1787,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
 
             case '*':
                 if (read_yaml_macros_and_links
-                        || state & (ST_CODE | ST_HEADING | ST_HTML_TAG 
+                        || state & (ST_CODE | ST_HTML_TAG 
                             | ST_MACRO_BODY | ST_PRE | ST_YAML))
                 {
                     *ptoken++ = *pline++;
@@ -1803,8 +1803,8 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 }
                 else if (u8_strlen(pline) > 1 && *(pline+1) == '*')
                 {
-                    /* Handle ** within link text specially */
-                    if (state & ST_LINK)
+                    /* Handle ** within headings and link text specially */
+                    if (state & (ST_HEADING | ST_LINK))
                     {
                         uint8_t* tag = state & ST_BOLD
                                 ? (uint8_t*)"</strong>"
@@ -1846,8 +1846,8 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 }
                 else
                 {
-                    /* Handle * within link text specially */
-                    if (state & ST_LINK)
+                    /* Handle * within headings and link text specially */
+                    if (state & (ST_HEADING | ST_LINK))
                     {
                         uint8_t* tag = state & ST_ITALIC
                                 ? (uint8_t*)"</em>"
@@ -2048,7 +2048,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
 
             case '|':
                 if (read_yaml_macros_and_links
-                        || (state & (ST_CODE | ST_HEADING | ST_HTML_TAG 
+                        || (state & (ST_CODE | ST_HTML_TAG 
                             | ST_PRE | ST_TAG | ST_YAML)))
                 {
                     *ptoken++ = *pline++;
@@ -2058,8 +2058,8 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
 
                 if (u8_strlen(pline) > 1 && *(pline+1) == '|')
                 {
-                    /* Handle || within link text specially */
-                    if (state & ST_LINK)
+                    /* Handle || within headings and link text specially */
+                    if (state & (ST_HEADING | ST_LINK))
                     {
                         uint8_t* tag = state & ST_KBD
                                 ? (uint8_t*)"</kbd>"
