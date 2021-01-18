@@ -2288,7 +2288,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                         *ptoken = 0;
                         token_len = u8_strlen(token);
 
-                        if (token_len + tag_len < BUFSIZE)
+                        if (token_len + tag_len + 1 < BUFSIZE)
                         {
                             u8_strncat(token, tag, BUFSIZE-token_len-1);
                             ptoken += tag_len;
@@ -2387,7 +2387,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                             token_len = u8_strlen(token);
                             if (link_text)
                             {
-                                if (token_len > link_size)
+                                if (token_len + 1 > link_size)
                                 {
                                     link_size = token_len+1;
                                     REALLOC(link_text, link_size)
