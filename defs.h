@@ -45,8 +45,8 @@
 #define KEYSIZE       256
 #define DATEBUFSIZE   12
 
-const char timestamp_format[]     = "d.m.y";
-const char timestamp_output_ext[] = ".html";
+static const char timestamp_format[]     = "d.m.y";
+static const char timestamp_output_ext[] = ".html";
 
 typedef enum
 {
@@ -76,36 +76,36 @@ typedef struct
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-const-variable"
-const UBYTE MAX_HEADING_LEVEL = 4;
-const UBYTE MAX_CSV_REGISTERS = 9;
+#define MAX_HEADING_LEVEL  4
+#define MAX_CSV_REGISTERS  9
 
-const ULONG ST_NONE             = 0;
-const ULONG ST_YAML             = 1;
-const ULONG ST_YAML_VAL         = 1 << 1;
-const ULONG ST_PARA_OPEN        = 1 << 2;
-const ULONG ST_TAG              = 1 << 3;
-const ULONG ST_HEADING          = 1 << 4;
-const ULONG ST_BOLD             = 1 << 5;
-const ULONG ST_ITALIC           = 1 << 6;
-const ULONG ST_PRE              = 1 << 7;
-const ULONG ST_CODE             = 1 << 8;
-const ULONG ST_BLOCKQUOTE       = 1 << 9;
-const ULONG ST_LINK             = 1 << 10;
-const ULONG ST_LINK_SECOND_ARG  = 1 << 11;
-const ULONG ST_LINK_SPAN        = 1 << 12;
-const ULONG ST_LINK_MACRO       = 1 << 13;
-const ULONG ST_IMAGE            = 1 << 14;
-const ULONG ST_IMAGE_SECOND_ARG = 1 << 15;
-const ULONG ST_MACRO_BODY       = 1 << 16;
-const ULONG ST_CSV_BODY         = 1 << 17;
-const ULONG ST_HTML_TAG         = 1 << 18;
-const ULONG ST_KBD              = 1 << 19;
-const ULONG ST_LIST             = 1 << 20;
+#define ST_NONE              0
+#define ST_YAML              1
+#define ST_YAML_VAL          (1 << 1)
+#define ST_PARA_OPEN         (1 << 2)
+#define ST_TAG               (1 << 3)
+#define ST_HEADING           (1 << 4)
+#define ST_BOLD              (1 << 5)
+#define ST_ITALIC            (1 << 6)
+#define ST_PRE               (1 << 7)
+#define ST_CODE              (1 << 8)
+#define ST_BLOCKQUOTE        (1 << 9)
+#define ST_LINK              (1 << 10)
+#define ST_LINK_SECOND_ARG   (1 << 11)
+#define ST_LINK_SPAN         (1 << 12)
+#define ST_LINK_MACRO        (1 << 13)
+#define ST_IMAGE             (1 << 14)
+#define ST_IMAGE_SECOND_ARG  (1 << 15)
+#define ST_MACRO_BODY        (1 << 16)
+#define ST_CSV_BODY          (1 << 17)
+#define ST_HTML_TAG          (1 << 18)
+#define ST_KBD               (1 << 19)
+#define ST_LIST              (1 << 20)
 
-const UBYTE ST_CS_NONE     = 0;
-const UBYTE ST_CS_HEADER   = 1;
-const UBYTE ST_CS_REGISTER = 1 << 2;
-const UBYTE ST_CS_QUOTE    = 1 << 3;
+#define ST_CS_NONE      0
+#define ST_CS_HEADER    1
+#define ST_CS_REGISTER  (1 << 2)
+#define ST_CS_QUOTE     (1 << 3)
 #pragma GCC diagnostic pop
 
 #endif /* __DEFS_H */

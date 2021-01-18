@@ -18,10 +18,10 @@ transforms custom Markdown-like syntax into HTML.</p>
 
 <h2>Prerequisites</h2>
 
-<p>Aside from the obvious (<strong>GCC</strong>), slweb requires <strong>realpath</strong>(1) to determine
-paths in local links and <strong>groff</strong>(1) and <strong>gzip</strong>(1) to create and compress
-documentation. <strong>git</strong>(1) is, aside from cloning the repository, required to use
-the directive <code>{git-log}</code>.</p>
+<p>Aside from the obvious (a C compiler, by default <strong>GNU C</strong>), slweb requires
+<strong>realpath</strong>(1) to determine paths in local links and <strong>groff</strong>(1) and
+<strong>gzip</strong>(1) to create and compress documentation.  <strong>git</strong>(1) is, aside from
+cloning the repository, required to use the directive <code>{git-log}</code>.</p>
 
 <h2>Install</h2>
 
@@ -42,6 +42,17 @@ $ su
 <pre>
 # ./do install
 </pre>
+
+<p>You can specify any compiler which uses <code>-Wall</code>, <code>-c</code>, <code>-g</code> and <code>-o</code> like GNU C,
+most notably <strong>tcc</strong>(1), by setting the <code>SLWEB_CC</code> environment variable. For
+example:</p>
+
+<pre>
+$ SLWEB_CC=tcc redo -j10
+</pre>
+
+<p>In the case of <strong>tcc</strong>, the tradeoff is that the debug information is limited
+compared to <strong>gcc</strong>, but the compilation time is significantly shorter.</p>
 
 <h2>Examples</h2>
 
@@ -123,7 +134,7 @@ this program. If not, see &lt;<a href="https://www.gnu.org/licenses">https://www
 
 <div id="git-log">
 Previous commit:
-index.slw fda452c 2021-01-16 23:53:23 +0100 (Страхиња Радић)  (HEAD -> master, tag: v0.3.5, origin/master, origin/HEAD)
+index.slw 95fd070 2021-01-18 21:11:31 +0100 (Страхиња Радић)  (HEAD -> master)
 </div><!--git-log-->
 
 

@@ -12,10 +12,10 @@ transforms custom Markdown-like syntax into HTML.
 
 ## Prerequisites
 
-Aside from the obvious (**GCC**), slweb requires **realpath**(1) to determine
-paths in local links and **groff**(1) and **gzip**(1) to create and compress
-documentation. **git**(1) is, aside from cloning the repository, required to use
-the directive `{git-log}`.
+Aside from the obvious (a C compiler, by default **GNU C**), slweb requires
+**realpath**(1) to determine paths in local links and **groff**(1) and
+**gzip**(1) to create and compress documentation.  **git**(1) is, aside from
+cloning the repository, required to use the directive `{git-log}`.
 
 ## Install
 
@@ -36,6 +36,17 @@ if you don't:
 ```
 # ./do install
 ```
+
+You can specify any compiler which uses `-Wall`, `-c`, `-g` and `-o` like GNU C,
+most notably **tcc**(1), by setting the `SLWEB_CC` environment variable. For
+example:
+
+```
+$ SLWEB_CC=tcc redo -j10
+```
+
+In the case of **tcc**, the tradeoff is that the debug information is limited
+compared to **gcc**, but the compilation time is significantly shorter.
 
 ## Examples
 
