@@ -304,13 +304,20 @@ read_file_into_buffer(uint8_t** buffer, size_t* buffer_size, char* input_filenam
 }
 
 int
+process_heading_start(FILE* output, UBYTE heading_level)
+{
+    print_output(output, "<h%d>", heading_level);
+    return 0;
+}
+
+int
 process_heading(uint8_t* token, FILE* output, UBYTE heading_level)
 {
     if (!token || u8_strlen(token) < 1)
         warning(1, (uint8_t*)"Empty heading");
 
-    print_output(output, "<h%d>%s</h%d>", 
-            heading_level, token ? (char*)token : "", heading_level);
+    print_output(output, "%s</h%d>", 
+            token ? (char*)token : "", heading_level);
 
     return 0;
 }
@@ -1898,6 +1905,16 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                     break;
                 }
 
+                if ((state & ST_HEADING) && !(state & ST_HEADING_TEXT))
+                {
+                    if (!read_yaml_macros_and_links)
+                        process_heading_start(output, heading_level);
+                    state |= ST_HEADING_TEXT;
+                    pline++;
+                    colno++;
+                    break;
+                }
+
                 if (colno == 1
                         && u8_strlen(pline) > 1
                         && startswith((char*)pline, "    "))
@@ -1945,8 +1962,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 break;
 
             case '{':
-                if (state & (ST_CODE | ST_HEADING | ST_PRE | ST_YAML 
-                            | ST_YAML_VAL))
+                if (state & (ST_CODE | ST_PRE | ST_YAML | ST_YAML_VAL))
                 {
                     *ptoken++ = *pline++;
                     colno++;
@@ -2021,8 +2037,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 break;
 
             case '}':
-                if (state & (ST_CODE | ST_PRE | ST_HEADING | ST_YAML
-                            | ST_YAML_VAL))
+                if (state & (ST_CODE | ST_PRE | ST_YAML | ST_YAML_VAL))
                 {
                     *ptoken++ = *pline++;
                     colno++;
@@ -2197,8 +2212,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 break;
 
             case '=':
-                if (state & (ST_CODE | ST_HEADING | ST_MACRO_BODY | ST_PRE
-                            | ST_TAG))
+                if (state & (ST_CODE | ST_MACRO_BODY | ST_PRE | ST_TAG))
                 {
                     *ptoken++ = *pline++;
                     colno++;
@@ -2492,7 +2506,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 }
                 else if (state & ST_HEADING)
                 {
-                    state &= ~ST_HEADING;
+                    state &= ~(ST_HEADING | ST_HEADING_TEXT);
                     if (!read_yaml_macros_and_links)
                         process_heading(token, output, heading_level);
                     first_line_in_doc = FALSE;
