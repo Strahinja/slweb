@@ -2440,6 +2440,14 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                     break;
                 }
 
+                if (u8_strlen(pline) > 1)
+                {
+                    pline++;
+                    colno++;
+
+                    *ptoken++ = *pline;
+                }
+
                 /* TODO: Cases? */
                 pline++;
                 colno++;
