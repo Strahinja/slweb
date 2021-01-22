@@ -91,11 +91,14 @@ are using a minimal subset of Markdown with added directives.
 .
 .SS Supported Markdown features
 .
-.IP \[bu]
+.IP \[bu] 4
 .BR Backticks .
 Text inside \fC`backticks`\fP will be put inside \fC<code></code>\fP. Text
-inside triple backticks (\fC```\fP) will be put inside \fC<pre></pre>\fP. Any
-\[lq]less-than\[rq] character will be converted to \fC&lt;\fP.
+surrounded by triple backticks (\fC```\fP) on the lines by themselves will be
+put inside \fC<pre></pre>\fP. Any \[lq]less-than\[rq] character inside backticks
+will be converted to \fC&lt;\fP. Any text following the first triple backticks
+until the end of the line will be ignored. This is to account for language
+highlighting specification, which isn't yet supported.
 .
 .IP \[bu]
 .BR Blockquotes .
@@ -108,6 +111,90 @@ Text inside \fC*asterisks*\fP or \fC_underlines_\fP will be put inside
 \fC<em></em>\fP. Text inside \fC**double asterisks**\fP or \fC__double
 underlines__\fP will be put inside \fC<strong></strong>\fP. \fC***More than
 two*** of the ___same symbol___\fP should be avoided.
+.
+.IP \[bu]
+.BR "Footnotes (regular and inline)" .
+Two-part regular footnotes can be added in a manner similar to links (see
+.BR Links ). 
+Inline footnotes are also supported.
+.
+.RS
+.IP \- 4
+.B Regular footnotes
+have two mandatory parts: first, the footnote mark is represented by
+\fC[^\f[CI]footnoteid\f[CR]]\fR, where
+.I footnoteid
+is the footnote identifier. Second, the text of the footnote is represented by
+\fC[^\f[CI]footnoteid\f[CR]]: \f[CI]sometext\fR, with
+.I sometext
+being the text of the footnote. Footnote text construct needs to begin at the
+start of a line, and it is the most practical to have it placed near the bottom
+of the file, similar to normal links.
+.
+.IP ""
+Combined, the input:
+.CDS 8
+This is a text[^first].
+
+[^first]: With a footnote!
+.CDE
+.
+.IP "" 4
+gives (some lines are wrapped for this manual):
+.
+.CDS 8
+This is a text<a href="#footnote-1" id="footnote-text-1">
+<sup>1</sup></a>.
+
+</p>
+<hr />
+<p id="footnote-1"><a href="#footnote-text-1">1.</a>  
+With a footnote!
+</p>
+.CDE
+.
+.IP \- 4
+.B Inline footnotes
+can be added by using the construct \fC^[footnotetext]\fP. For example, input
+.
+.CDS 8
+Inline footnote^[Footnote text needs to fit on a line!] in a
+paragraph.
+.CDE
+.
+.IP "" 
+will produce
+.
+.CDS 8
+Inline footnote<a href="#inline-footnote-1" 
+id="inline-footnote-text-1"><sup>1</sup></a> in a
+paragraph.
+<hr />
+<p id="inline-footnote-1"><a href="#inline-footnote-text-1">
+1.</a> Footnote text needs to fit on a line!</p>
+.CDE
+.RE
+.
+.IP
+The horizontal rule and the list of footnotes is printed only once, before the
+end of
+.SM HTML
+document body. Rule and the list of footnotes can be surrounded by a div with
+the \[lq]\fCfootnotes\fP\[rq] id by setting the
+.SM YAML
+variable
+.I add-footnote-div
+to \[lq]1\[rq] (see
+.BR add-footnote-div ).
+.
+.IP
+Inline and regular footnotes can be used at the same time, but they don't share
+the numbering. This doesn't affect footnote link functionality, but it does
+affect footnote presentation, as some footnote numbers will overlap. As a
+result, whenever
+.B slweb
+encounters both footnote types in the same document, a warning will be issued to
+.IR stderr .
 .
 .IP \[bu]
 .BR Headings .
@@ -135,6 +222,11 @@ Which will produce:
 .CDE
 .
 .IP
+As with links, a form similar to the \[lq]regular form\[rq] of links can also be
+used, using the image id instead of the direct
+.SM URL.
+.
+.IP
 If the additional link is not desirable, it can be turned off by setting
 .B add-image-links
 to \[lq]0\[rq].
@@ -151,10 +243,14 @@ Two spaces followed by a newline will become \fC<br />\fP.
 .
 .IP \[bu]
 .BR Links .
+.
+.RS
+.IP \- 4
+.BR "Inline links" .
 The construct \fC[A link](https://example.com)\fP will be converted into \fC<a
 href="https://example.com">A link</a>\fP.
 .
-.IP
+.IP ""
 Special case is the form \fC[=somemacro Link title](https://anything)\fP which
 prepends the body of a macro
 .I somemacro
@@ -166,13 +262,13 @@ into the \fC<a></a>\fP tag (here broken into multiple lines for clarity):
 Link title</a>
 .CDE
 .
-.IP
+.IP "" 4
 This can, for example, be used to add
 .SM SVG
 icons to links. See
 .BR Macros .
 .
-.IP
+.IP "" 4
 Also, the form \fC[(Link title)](http://asite.com)\fP will surround the link
 title (text between \fC<a></a>\fP tags) with \fC<span></span>\fP, like so:
 .
@@ -199,7 +295,39 @@ outside of the \fC<span></span>\fP:
 <span>Link title</span></a>
 .CDE
 .
-.IP \[bu]
+.IP \-
+.BR "Regular links" .
+Everything said about the inline links applies to regular links, with the
+exception that instead of the parenthesized
+.SM URL,
+link text inside brackets will be followed by link id (different than the
+\[lq]\fCid\fP\[rq]
+.IR attribute! )
+inside brackets, and a
+separate definition of that link id is needed, usually near the end of input.
+.
+.IP
+For example:
+.
+.CDS 8
+Here's a link to [my website][mysite].
+
+[mysite]: https://mysite.com
+.CDE
+.
+.IP
+will produce:
+.
+.CDS 8
+<p>Here's a link to <a href="https://mysite.com">my 
+website</a>.</p>
+.CDE
+.
+.IP
+This can help reduce the amount of code in the text of the page.
+.RE
+.
+.IP \[bu] 4
 .BR Lists .
 Lines starting with a dash (\fC\-\fP) will start an unordered list (if used for
 the first time) and start a list item. Input:
@@ -257,7 +385,8 @@ will produce:
 .
 .IP \[bu] 4
 .BR Paragraphs .
-Text surrounded by newlines will be put inside \fC<p></p>\fP tags.
+Text surrounded by newlines will be put inside \fC<p></p>\fP tags. See
+.SM "KNOWN LIMITATIONS."
 .
 .SS Directives
 .
@@ -445,6 +574,12 @@ about the current commit would be impossible).
 .SS Special YAML variables
 .
 .IP \[bu] 4
+.BR add-footnote-div .
+If set to \[lq]1\[rq], list of footnotes preceded by a horizontal rule will be
+surrounded with a div having the id \[lq]\fCfootnotes\fP\[rq] (see
+.BR Footnotes ).
+.
+.IP \[bu]
 .BR add-image-links .
 If set to \[lq]0\[rq], links around images will not be added (otherwise they
 will by default, see
@@ -527,7 +662,7 @@ tags.
 The contents of this variable will be treated as a
 .SM CSS
 file name to be included using the \fC<link rel="stylesheet" />\fP tag. You can
-have more than one 
+add more than one 
 .I stylesheet
 declaration per 
 .I .slw

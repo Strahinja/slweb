@@ -1,0 +1,17 @@
+---
+site-name: Footnotes test
+---
+
+# Footnotes
+
+Footnotes can be added by using the syntax `[^id]` and later `[^id]: Footnote
+text`[^justlike].
+
+You can thus minimize the amount of extra markup present in the text
+itself[^links].
+
+[^justlike]: Just like this!
+[^links]: Similar to links. Footnotes themselves 
+          can contain **some** `markup`, and can be broken up into 
+          multiple lines.
+

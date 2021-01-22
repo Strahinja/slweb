@@ -1497,11 +1497,14 @@ end_head_start_body(FILE* output)
 }
 
 int
-end_footnotes(FILE* output)
+end_footnotes(FILE* output, BOOL add_footnote_div)
 {
     size_t footnote = 0;
 
-    print_output(output, "<div class=\"footnotes\">\n<hr />\n");
+    if (add_footnote_div)
+        print_output(output, "<div class=\"footnotes\">\n");
+
+    print_output(output, "<hr />\n");
 
     for (footnote = 0; footnote < inline_footnote_count; footnote++)
         print_output(output, "<p id=\"inline-footnote-%d\">"
@@ -1521,7 +1524,9 @@ end_footnotes(FILE* output)
         footnote++;
     }
 
-    print_output(output, "</div><!--footnotes-->\n");
+    if (add_footnote_div)
+        print_output(output, "</div><!--footnotes-->\n");
+
     return 0;
 }
 
@@ -1541,7 +1546,8 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
     uint8_t* date                      = NULL;
     uint8_t* permalink_url             = NULL;
     uint8_t* ext_in_permalink          = NULL;
-    uint8_t* add_image_links           = NULL;
+    uint8_t* var_add_image_links       = NULL;
+    uint8_t* var_add_footnote_div      = NULL;
     uint8_t* pbuffer                   = NULL;
     uint8_t* line                      = NULL;
     uint8_t* pline                     = NULL;
@@ -1558,7 +1564,8 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
     BOOL skip_eol                      = FALSE;
     BOOL previous_line_blank           = FALSE;
     BOOL processed_start_of_line       = FALSE;
-    BOOL add_links                     = TRUE;
+    BOOL add_image_links               = TRUE;
+    BOOL add_footnote_div              = FALSE;
     BOOL list_para                     = FALSE;
     size_t pline_len                   = 0;
 
@@ -1580,8 +1587,10 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
     date = get_value(vars, vars_count, (uint8_t*)"date", NULL);
     permalink_url = get_value(vars, vars_count, (uint8_t*)"permalink-url", NULL);
     ext_in_permalink = get_value(vars, vars_count, (uint8_t*)"ext-in-permalink", NULL);
-    add_image_links = get_value(vars, vars_count, (uint8_t*)"add-image-links", NULL);
-    add_links = !(add_image_links && *add_image_links == '0');
+    var_add_image_links = get_value(vars, vars_count, (uint8_t*)"add-image-links", NULL);
+    add_image_links = !(var_add_image_links && *var_add_image_links == '0');
+    var_add_footnote_div = get_value(vars, vars_count, (uint8_t*)"add-footnote-div", NULL);
+    add_footnote_div = var_add_footnote_div && *var_add_footnote_div == '1';
 
     CALLOC(line, uint8_t, BUFSIZE)
     CALLOC(token, uint8_t, BUFSIZE)
@@ -1773,8 +1782,9 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 }
                 else if (!(state & (ST_PRE | ST_TAG | ST_YAML)))
                 {
-                    /* Handle ` within headings and link text specially */
-                    if (state & (ST_HEADING | ST_LINK))
+                    /* Handle ` within footnotes, headings and link text specially */
+                    if (state & (ST_INLINE_FOOTNOTE | ST_HEADING 
+                                | ST_FOOTNOTE_TEXT | ST_LINK))
                     {
                         uint8_t* tag = state & ST_CODE
                                 ? (uint8_t*)"</code>"
@@ -1842,8 +1852,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 break;
 
             case '_':
-                if (read_yaml_macros_and_links
-                        || state & (ST_CODE | ST_HTML_TAG 
+                if (state & (ST_CODE | ST_HTML_TAG 
                             | ST_MACRO_BODY | ST_PRE | ST_TAG | ST_YAML))
                 {
                     *ptoken++ = *pline++;
@@ -1853,8 +1862,9 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
 
                 if (u8_strlen(pline) > 1 && *(pline+1) == '_')
                 {
-                    /* Handle __ within headings and link text specially */
-                    if (state & (ST_HEADING | ST_LINK))
+                    /* Handle __ within footnotes, headings and link text specially */
+                    if (state & (ST_INLINE_FOOTNOTE | ST_HEADING 
+                                | ST_FOOTNOTE_TEXT | ST_LINK))
                     {
                         uint8_t* tag = state & ST_BOLD
                                 ? (uint8_t*)"</strong>"
@@ -1892,8 +1902,9 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 }
                 else
                 {
-                    /* Handle _ within headings and link text specially */
-                    if (state & (ST_HEADING | ST_LINK))
+                    /* Handle _ within footnotes, headings and link text specially */
+                    if (state & (ST_INLINE_FOOTNOTE | ST_HEADING 
+                                | ST_FOOTNOTE_TEXT | ST_LINK))
                     {
                         uint8_t* tag = state & ST_ITALIC
                                 ? (uint8_t*)"</em>"
@@ -1932,8 +1943,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 break;
 
             case '*':
-                if (read_yaml_macros_and_links
-                        || state & (ST_CODE | ST_HTML_TAG 
+                if (state & (ST_CODE | ST_HTML_TAG 
                             | ST_MACRO_BODY | ST_PRE | ST_YAML))
                 {
                     *ptoken++ = *pline++;
@@ -1950,8 +1960,9 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 }
                 else if (pline_len > 1 && *(pline+1) == '*')
                 {
-                    /* Handle ** within headings and link text specially */
-                    if (state & (ST_HEADING | ST_LINK))
+                    /* Handle ** within footnotes, headings and link text specially */
+                    if (state & (ST_INLINE_FOOTNOTE | ST_HEADING 
+                                | ST_FOOTNOTE_TEXT | ST_LINK))
                     {
                         uint8_t* tag = state & ST_BOLD
                                 ? (uint8_t*)"</strong>"
@@ -1989,8 +2000,10 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 }
                 else
                 {
-                    /* Handle * within headings and link text specially */
-                    if (state & (ST_HEADING | ST_LINK))
+                    /* Handle * within footnotes, headings and link text specially */
+                    if (state & (ST_INLINE_FOOTNOTE | ST_HEADING 
+                                | ST_FOOTNOTE_TEXT | ST_LINK))
+ 
                     {
                         uint8_t* tag = state & ST_ITALIC
                                 ? (uint8_t*)"</em>"
@@ -2185,9 +2198,8 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 break;
 
             case '|':
-                if (read_yaml_macros_and_links
-                        || (state & (ST_CODE | ST_HTML_TAG 
-                            | ST_PRE | ST_TAG | ST_YAML)))
+                if (state & (ST_CODE | ST_HTML_TAG 
+                            | ST_PRE | ST_TAG | ST_YAML))
                 {
                     *ptoken++ = *pline++;
                     colno++;
@@ -2196,8 +2208,9 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
 
                 if (u8_strlen(pline) > 1 && *(pline+1) == '|')
                 {
-                    /* Handle || within headings and link text specially */
-                    if (state & (ST_HEADING | ST_LINK))
+                    /* Handle || within footnotes, headings and link text specially */
+                    if (state & (ST_INLINE_FOOTNOTE | ST_HEADING 
+                                | ST_FOOTNOTE_TEXT | ST_LINK))
                     {
                         uint8_t* tag = state & ST_KBD
                                 ? (uint8_t*)"</kbd>"
@@ -2301,7 +2314,8 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 break;
 
             case '!':
-                if (state & (ST_CODE | ST_HEADING | ST_LINK | ST_MACRO_BODY 
+                if (state & (ST_CODE | ST_FOOTNOTE_TEXT | ST_HEADING 
+                            | ST_INLINE_FOOTNOTE | ST_LINK | ST_MACRO_BODY 
                             | ST_PRE))
                 {
                     *ptoken++ = *pline++;
@@ -2309,15 +2323,19 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                     break;
                 }
 
-                /* Output existing text up to ! */
-                *ptoken = 0;
-                if (!read_yaml_macros_and_links)
-                    print_output(output, "%s", token);
-                *token = 0;
-                ptoken = token;
-
                 if (u8_strlen(pline) > 1 && *(pline+1) == '[')
                 {
+                    /* Output existing text up to ! */
+                    *ptoken = 0;
+                    process_text_token(line, first_line_in_doc,
+                            previous_line_blank, processed_start_of_line,
+                            read_yaml_macros_and_links, list_para, output,
+                            &token, &ptoken, FALSE);
+                    processed_start_of_line = TRUE;
+
+                    *token = 0;
+                    ptoken = token;
+
                     state |= ST_IMAGE;
                     pline += 2;
                     colno += 2;
@@ -2354,8 +2372,16 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
             case '[':
                 pline_len = u8_strlen(pline);
 
+                if (state & (ST_CODE | ST_HEADING | ST_MACRO_BODY | ST_PRE))
+                {
+                    *ptoken++ = *pline++;
+                    colno++;
+                    break;
+                }
+
                 if (pline_len > 1 && *(pline+1) == '^')
                 {
+                    /* Output existing text up to [^ */
                     *ptoken = 0;
                     process_text_token(line, first_line_in_doc,
                             previous_line_blank, processed_start_of_line,
@@ -2368,13 +2394,6 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                     state |= ST_FOOTNOTE;
                     pline += 2;
                     colno += 2;
-                    break;
-                }
-
-                if (state & (ST_CODE | ST_HEADING | ST_MACRO_BODY | ST_PRE))
-                {
-                    *ptoken++ = *pline++;
-                    colno++;
                     break;
                 }
 
@@ -2398,7 +2417,8 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 break;
 
             case '(':
-                if (state & (ST_CODE | ST_HEADING | ST_MACRO_BODY | ST_PRE))
+                if (state & (ST_CODE | ST_FOOTNOTE_TEXT | ST_HEADING 
+                            | ST_INLINE_FOOTNOTE | ST_MACRO_BODY | ST_PRE))
                     *ptoken++ = *pline;
                 else if (state & ST_LINK)
                 {
@@ -2456,7 +2476,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                                     token, output);
                         else
                             process_inline_image(link_text, token, output, 
-                                    add_links);
+                                    add_image_links);
                     }
                     *token = 0;
                     ptoken = token;
@@ -2527,7 +2547,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 else if (state & ST_IMAGE_SECOND_ARG)
                 {
                     if (!read_yaml_macros_and_links)
-                        process_image(link_text, token, output, add_links);
+                        process_image(link_text, token, output, add_image_links);
                     *token = 0;
                     ptoken = token;
                     state &= ~(ST_IMAGE | ST_IMAGE_SECOND_ARG);
@@ -2600,19 +2620,29 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 break;
 
             case '^':
-                if (u8_strlen(pline) > 1 && *(pline+1) == '[')
-                {
-                    state |= ST_INLINE_FOOTNOTE;
-                    pline += 2;
-                    colno += 2;
-                    break;
-                }
-
-                if (read_yaml_macros_and_links
-                        || state & (ST_CODE | ST_PRE | ST_YAML))
+                if (state & (ST_CODE | ST_FOOTNOTE_TEXT | ST_INLINE_FOOTNOTE 
+                            | ST_PRE | ST_YAML))
                 {
                     *ptoken++ = *pline++;
                     colno++;
+                    break;
+                }
+
+                if (u8_strlen(pline) > 1 && *(pline+1) == '[')
+                {
+                    /* Output existing text up to ^[ */
+                    *ptoken = 0;
+                    process_text_token(line, first_line_in_doc,
+                            previous_line_blank, processed_start_of_line,
+                            read_yaml_macros_and_links, list_para, output,
+                            &token, &ptoken, FALSE);
+                    processed_start_of_line = TRUE;
+
+                    *token = 0;
+                    ptoken = token;
+                    state |= ST_INLINE_FOOTNOTE;
+                    pline += 2;
+                    colno += 2;
                     break;
                 }
 
@@ -2834,7 +2864,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
 
     if (!read_yaml_macros_and_links 
             && (footnote_count > 0 || inline_footnote_count > 0))
-        end_footnotes(output);
+        end_footnotes(output, add_footnote_div);
 
     if (!read_yaml_macros_and_links && !body_only)
         end_body_and_html(output);

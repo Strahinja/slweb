@@ -1,0 +1,15 @@
+---
+site-name: Footnote warning demo
+---
+
+# Parse warning
+
+If the input contains both inline and regular footnotes, **slweb** will issue a
+warning to `stderr`^[So this warning won't appear in the output.].
+
+The numbering of the footnotes will most likely overlap[^A] (hence the warning),
+but the anchors will be unique, having `inline-` prepended to the _id_ for
+inline footnotes.
+
+[^A]: As evident in this example.
+

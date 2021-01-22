@@ -1,4 +1,4 @@
 for d in *; do
-    [ -d $d ] && echo $d/index.html
+    [ -d $d ] && echo $d/all
 done | xargs redo-ifchange
 
