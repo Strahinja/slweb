@@ -211,6 +211,12 @@ block boundaries, it will work only if
 block is present in the input and before the three dashes for the horizontal
 rule. Any text following the three dashes on the same line will be ignored.
 .
+.IP
+Alternatively, three asterisks (\fC***\fP) can be used instead of dashes,
+avoiding the necessity for a
+.SM YAML
+block preceding the asterisks.
+.
 .IP \[bu]
 .BR Images .
 Similar to links (see
@@ -527,6 +533,12 @@ file, it will be replaced by the macro body. Macro definitions can't be nested
 nor can they contain macro calls, and doing so will produce an error.
 .
 .IP \[bu]
+.BR "Previous Git commit information" .
+Directive \fC{git-log}\fP is converted into a div with the id \fCgit-log\fP
+containing the information about the previous commit (as having information
+about the current commit would be impossible).
+.
+.IP \[bu]
 .BR "Subdirectory inclusion (blogging directive)" .
 The command \fC{incdir "\fIdirname\fC" \fInum\fC =\fImacroname\fC}\fP
 .RI ( num
@@ -573,12 +585,6 @@ directive. (See
 .BR Includes " and " date ", " ext-in-permalink ", " permalink-url ", " 
 .BR samedir-permalink " variables.)"
 .RE
-.
-.IP \[bu]
-.BR "Previous Git commit information" .
-Directive \fC{git-log}\fP is converted into a div with the id \fCgit-log\fP
-containing the information about the previous commit (as having information
-about the current commit would be impossible).
 .
 .SS Special YAML variables
 .

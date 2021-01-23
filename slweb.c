@@ -1331,23 +1331,20 @@ process_line_start(uint8_t* line, BOOL first_line_in_doc,
             && !processed_start_of_line
             && !(state & (ST_BLOCKQUOTE | ST_PRE)))
     {
-        if (state & ST_LIST)
+        if (!list_para)
         {
-            if (!list_para)
+            if (state & ST_LIST)
             {
-                if (state & ST_LIST)
-                {
-                    state &= ~ST_LIST;
-                    if (!read_yaml_macros_and_links)
-                        process_list_end(output);
-                }
+                state &= ~ST_LIST;
+                if (!read_yaml_macros_and_links)
+                    process_list_end(output);
+            }
 
-                if (state & ST_FOOTNOTE_TEXT)
-                {
-                    state &= ~ST_FOOTNOTE_TEXT;
-                    if (!read_yaml_macros_and_links)
-                        print_output(output, "</p>\n");
-                }
+            if (state & ST_FOOTNOTE_TEXT)
+            {
+                state &= ~ST_FOOTNOTE_TEXT;
+                if (!read_yaml_macros_and_links)
+                    print_output(output, "</p>\n");
             }
         }
         if (!read_yaml_macros_and_links)
@@ -1419,7 +1416,11 @@ process_footnote(uint8_t* token, BOOL footnote_definition, BOOL footnote_output,
 int
 process_horizontal_rule(FILE* output)
 {
+    if (state & ST_PARA_OPEN)
+        print_output(output, "</p>\n");
     print_output(output, "<hr />\n");
+    if (state & ST_PARA_OPEN)
+        print_output(output, "<p>\n");
     return 0;
 }
 
@@ -1507,10 +1508,16 @@ end_footnotes(FILE* output, BOOL add_footnote_div)
 {
     size_t footnote = 0;
 
+    if (state & ST_PARA_OPEN)
+    {
+        print_output(output, "</p>\n");
+        state &= ~ST_PARA_OPEN;
+    }
+
     if (add_footnote_div)
         print_output(output, "<div class=\"footnotes\">\n");
 
-    print_output(output, "<hr />\n");
+    process_horizontal_rule(output);
 
     for (footnote = 0; footnote < inline_footnote_count; footnote++)
         print_output(output, "<p id=\"inline-footnote-%d\">"
@@ -1973,7 +1980,19 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 if (colno == 1
                         && pline_len > 1 && *(pline+1) == '[')
                 {
+                    process_line_start(line, first_line_in_doc,
+                            previous_line_blank, processed_start_of_line,
+                            read_yaml_macros_and_links, list_para, output,
+                            &token, &ptoken);
+
                     /* Ignore abbreviations (for now) */
+                    pline = NULL;
+                }
+                else if (colno == 1
+                        && pline_len > 2 && startswith((char*)pline, "***"))
+                {
+                    skip_eol = TRUE;
+                    process_horizontal_rule(output);
                     pline = NULL;
                 }
                 else if (pline_len > 1 && *(pline+1) == '*')
