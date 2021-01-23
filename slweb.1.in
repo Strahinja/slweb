@@ -176,7 +176,7 @@ paragraph.
 .RE
 .
 .IP
-The horizontal rule and the list of footnotes is printed only once, before the
+The horizontal rule and the list of footnotes is output only once, before the
 end of
 .SM HTML
 document body. Rule and the list of footnotes can be surrounded by a div with
@@ -189,9 +189,8 @@ to \[lq]1\[rq] (see
 .
 .IP
 Inline and regular footnotes can be used at the same time, but they don't share
-the numbering. This doesn't affect footnote link functionality, but it does
-affect footnote presentation, as some footnote numbers will overlap. As a
-result, whenever
+the numbering. This doesn't affect functionality, but it does affect
+presentation, as some footnote numbers will overlap. As a result, whenever
 .B slweb
 encounters both footnote types in the same document, a warning will be issued to
 .IR stderr .
@@ -201,6 +200,16 @@ encounters both footnote types in the same document, a warning will be issued to
 A line starting with \fC#\fP followed by space will be put inside
 \fC<h?></h?>\fP, where \fC?\fP stands for 1-4, depending on the number of
 hash signs.
+.
+.IP \[bu]
+.BR "Horizontal rules" .
+Three dashes at the start of the line will produce a \fC<hr />\fP in the output.
+As this Markdown feature clashes with
+.SM YAML
+block boundaries, it will work only if
+.SM YAML
+block is present in the input and before the three dashes for the horizontal
+rule. Any text following the three dashes on the same line will be ignored.
 .
 .IP \[bu]
 .BR Images .
@@ -297,8 +306,8 @@ outside of the \fC<span></span>\fP:
 .
 .IP \-
 .BR "Regular links" .
-Everything said about the inline links applies to regular links, with the
-exception that instead of the parenthesized
+Everything said about inline links applies to regular links, with the exception
+that instead of the parenthesized
 .SM URL,
 link text inside brackets will be followed by link id (different than the
 \[lq]\fCid\fP\[rq]
@@ -310,9 +319,9 @@ separate definition of that link id is needed, usually near the end of input.
 For example:
 .
 .CDS 8
-Here's a link to [my website][mysite].
+Here's a link to [my website][mw].
 
-[mysite]: https://mysite.com
+[mw]: https://mysite.com
 .CDE
 .
 .IP

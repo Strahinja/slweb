@@ -4,12 +4,12 @@
         [ ] keep-macros variable: when present in an included file, macros from
             child process get added to the parent
 
-        [~] Add footnote support
+        [x] Add footnote support
             [x] Add initial support
-            [ ] Test
+            [x] Test
             [x] Add documentation
 
-        [ ] Add horizontal rule support
+        [x] Add horizontal rule support
 
         [ ] Add additional ways to activate lists (*, o)
             - Two spaces min instead of four for indent?

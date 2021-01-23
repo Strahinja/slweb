@@ -18,7 +18,6 @@
  */
 
 #include "defs.h"
-#include <sys/types.h>
 
 static size_t lineno                  = 0;
 static size_t colno                   = 1;
@@ -1418,6 +1417,13 @@ process_footnote(uint8_t* token, BOOL footnote_definition, BOOL footnote_output,
 }
 
 int
+process_horizontal_rule(FILE* output)
+{
+    print_output(output, "<hr />\n");
+    return 0;
+}
+
+int
 process_text_token(uint8_t* line, BOOL first_line_in_doc,
         BOOL previous_line_blank,
         BOOL processed_start_of_line,
@@ -1567,6 +1573,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
     BOOL add_image_links               = TRUE;
     BOOL add_footnote_div              = FALSE;
     BOOL list_para                     = FALSE;
+    BOOL yaml_parsed                   = FALSE;
     size_t pline_len                   = 0;
 
     if (!buffer)
@@ -1682,10 +1689,21 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                         && u8_strlen(pline) > 2
                         && startswith((char*)pline, "---"))
                 {
+                    skip_eol = TRUE;
+
+                    if (yaml_parsed)
+                    {
+                        process_horizontal_rule(output);
+                        pline = NULL;
+                        break;
+                    }
+
                     state ^= ST_YAML;
 
+                    if (!(state & ST_YAML))
+                        yaml_parsed = TRUE;
+
                     skip_change_first_line_in_doc = TRUE;
-                    skip_eol = TRUE;
 
                     pline += 3;
                     colno += 3;
