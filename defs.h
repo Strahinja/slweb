@@ -38,7 +38,7 @@
 #include <uniwidth.h>
 
 #define PROGRAMNAME   "slweb"
-#define VERSION       "0.3.5"
+#define VERSION       "0.3.6"
 #define COPYRIGHTYEAR "2020, 2021"
 
 #define BUFSIZE       1024
@@ -105,6 +105,8 @@ typedef struct
 #define ST_FOOTNOTE          (1 << 22)
 #define ST_FOOTNOTE_TEXT     (1 << 23)
 #define ST_INLINE_FOOTNOTE   (1 << 24)
+#define ST_FORMULA           (1 << 25)
+#define ST_DISPLAY_FORMULA   (1 << 26)
 
 #define ST_CS_NONE      0
 #define ST_CS_HEADER    1

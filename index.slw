@@ -2,6 +2,7 @@
 site-name: slweb - Simple static website generator. 
 site-desc: Simple static website generator
 stylesheet: index.css
+stylesheet: https://cdn.jsdelivr.net/npm/katex@0.12.0/dist/katex.min.css
 favicon-url: /slweb/favicon.ico
 ---
 {main}
@@ -15,7 +16,8 @@ transforms custom Markdown-like syntax into HTML.
 Aside from the obvious (a C compiler, by default **GNU C**), slweb requires
 **realpath**(1) to determine paths in local links and **groff**(1) and
 **gzip**(1) to create and compress documentation.  **git**(1) is, aside from
-cloning the repository, required to use the directive `{git-log}`.
+cloning the repository, required to use the directive `{git-log}`. $\KaTeX$
+([https://katex.org][katex]) is optionally used for math mode.
 
 ## Install
 
@@ -25,7 +27,7 @@ $ cd slweb
 $ su
 ```
 
-Then, if you have [apenwarr/redo][5]:
+Then, if you have [apenwarr/redo][aredo]:
 
 ```
 # redo install
@@ -50,7 +52,7 @@ compared to **gcc**, but the compilation time is significantly shorter.
 
 ## Examples
 
-See the [`examples/`][1] directory in this repository.
+See the [`examples/`][examp] directory in this repository.
 
 Given the file `index.slw` in the current directory:
 
@@ -100,13 +102,13 @@ file `index.html` contains:
 
 ## TODO (checklist)
 
-See the file [`TODO`][2] for more information.
+See the file [`TODO`][mtodo] for more information.
 
 
 ## Bugs and limitations
 
-Bugs can be reported using the [Github issue tracker][3]. See the manpage (`man
-slweb`) after installing **slweb** for more information.
+Bugs can be reported using the [Github issue tracker][issue]. See the manpage
+(`man slweb`) after installing **slweb** for more information.
 
 
 ## License
@@ -124,16 +126,17 @@ WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
 PARTICULAR PURPOSE. See the GNU General Public License for more details. 
 
 You should have received a copy of the GNU General Public License along with
-this program. If not, see &lt;[https://www.gnu.org/licenses/][4]&gt;. 
+this program. If not, see &lt;[https://www.gnu.org/licenses/][licen]&gt;. 
 
 {git-log}
 
 {made-by}
 {/main}
 
-[1]: https://github.com/Strahinja/slweb/tree/master/examples
-[2]: https://github.com/Strahinja/slweb/tree/master/TODO
-[3]: https://github.com/Strahinja/slweb/issues
-[4]: https://www.gnu.org/licenses
-[5]: https://github.com/apenwarr/redo
+[examp]: https://github.com/Strahinja/slweb/tree/master/examples
+[mtodo]: https://github.com/Strahinja/slweb/tree/master/TODO
+[issue]: https://github.com/Strahinja/slweb/issues
+[licen]: https://www.gnu.org/licenses
+[aredo]: https://github.com/apenwarr/redo
+[katex]: https://katex.org
 

@@ -8,6 +8,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="generator" content="slweb" />
 <link rel="stylesheet" href="index.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.12.0/dist/katex.min.css" />
 </head>
 <body>
 <main>
@@ -21,7 +22,8 @@ transforms custom Markdown-like syntax into HTML.</p>
 <p>Aside from the obvious (a C compiler, by default <strong>GNU C</strong>), slweb requires
 <strong>realpath</strong>(1) to determine paths in local links and <strong>groff</strong>(1) and
 <strong>gzip</strong>(1) to create and compress documentation.  <strong>git</strong>(1) is, aside from
-cloning the repository, required to use the directive <code>{git-log}</code>.</p>
+cloning the repository, required to use the directive <code>{git-log}</code>. <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mtext>KaTeX</mtext></mrow><annotation encoding="application/x-tex">\KaTeX</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.89883em;vertical-align:-0.2155em;"></span><span class="mord text"><span class="mord textrm">K</span><span class="mspace" style="margin-right:-0.17em;"></span><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.68333em;"><span style="top:-2.904999em;"><span class="pstrut" style="height:2.7em;"></span><span class="mord"><span class="mord textrm mtight sizing reset-size6 size3">A</span></span></span></span></span></span><span class="mspace" style="margin-right:-0.15em;"></span><span class="mord text"><span class="mord textrm">T</span><span class="mspace" style="margin-right:-0.1667em;"></span><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.46782999999999997em;"><span style="top:-2.7845em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord textrm">E</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2155em;"><span></span></span></span></span><span class="mspace" style="margin-right:-0.125em;"></span><span class="mord textrm">X</span></span></span></span></span></span>
+(<a href="https://katex.org">https://katex.org</a>) is optionally used for math mode.</p>
 
 <h2>Install</h2>
 
@@ -111,13 +113,13 @@ $ slweb index.slw > index.html
 
 <h2>Bugs and limitations</h2>
 
-<p>Bugs can be reported using the <a href="https://github.com/Strahinja/slweb/issues">Github issue tracker</a>. See the manpage (<code>man
-slweb</code>) after installing <strong>slweb</strong> for more information.</p>
+<p>Bugs can be reported using the <a href="https://github.com/Strahinja/slweb/issues">Github issue tracker</a>. See the manpage
+(<code>man slweb</code>) after installing <strong>slweb</strong> for more information.</p>
 
 
 <h2>License</h2>
 
-<p>slweb - Simple static website generator.<br />
+<p>slweb - Simple static website generator.<br /> 
 Copyright (C) 2020, 2021 Страхиња Радић</p>
 
 <p>This program is free software: you can redistribute it and/or modify it under
@@ -134,7 +136,7 @@ this program. If not, see &lt;<a href="https://www.gnu.org/licenses">https://www
 
 <div id="git-log">
 Previous commit:
-index.slw 2062af3 2021-01-23 13:21:37 +0100 (Страхиња Радић)  (HEAD -> master, origin/master, origin/HEAD)
+index.slw 5144730 2021-01-24 22:09:25 +0100 (Страхиња Радић)  (HEAD -> master, tag: v0.3.6, origin/master, origin/HEAD)
 </div><!--git-log-->
 
 

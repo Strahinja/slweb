@@ -1,0 +1,14 @@
+---
+stylesheet: https://cdn.jsdelivr.net/npm/katex@0.12.0/dist/katex.min.css
+---
+
+This is an inline formula: $\sum_{i=1}^n\frac1n\rightarrow0$. 
+
+A display formula: 
+$$\int_{j=0}^n\frac{(n-1)^3}{n^2}\,{\rm d}x.$$
+
+Some more:
+$$\begin{aligned}(a-b)(a+b)
+&=a^2-ab+ab-b^2\\
+&=a^2-b^2\end{aligned}$$
+

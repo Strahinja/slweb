@@ -403,6 +403,25 @@ will produce:
 Text surrounded by newlines will be put inside \fC<p></p>\fP tags. See
 .SM "KNOWN LIMITATIONS."
 .
+.SS Math mode
+.
+.LP
+Math mode is supported through KaTeX. With
+.BR katex
+installed, anything between dollar signs (\fC$\fP) will be transformed into
+MathML and 
+.SM HTML 
+markup. To generate display math, use double dollar signs (\fC$$\fP). The text
+between the dollar signs in both cases should be LaTeX source code, and is
+passed to
+.BR katex .
+The KaTeX stylesheet is not included, and needs to be included separately
+through the
+.B stylesheet
+.SM YAML
+variable (see
+.BR stylesheet ).
+.
 .SS Directives
 .
 .IP \[bu] 4
