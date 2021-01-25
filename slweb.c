@@ -624,8 +624,8 @@ process_include(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links)
     if (!input_filename)
         return warning(1, (uint8_t*)"Cannot use 'include' in stdin");
 
-    uint8_t* ptoken = u8_strchr(token, (ucs4_t)' ');
-    char* include_filename = NULL;
+    uint8_t* ptoken         = u8_strchr(token, (ucs4_t)' ');
+    char* include_filename  = NULL;
     char* pinclude_filename = NULL;
     
     if (!ptoken)
@@ -784,7 +784,7 @@ filter_slw(const struct dirent* node)
         return 0;
 
     size_t node_len = strlen(node->d_name);
-    size_t slw_len = strlen(".slw");
+    size_t slw_len  = strlen(".slw");
 
     if (slw_len >= node_len)
         return 0;
@@ -920,16 +920,16 @@ process_incdir(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links)
     if (read_yaml_macros_and_links)
         return 0;
 
-    uint8_t* saveptr = NULL;
+    uint8_t* saveptr                        = NULL;
     /* skipping the first token (incdir) */
-    uint8_t* arg = u8_strtok(token, (uint8_t*)" ", &saveptr);
-    size_t arg_len = 0;
-    long num = 5;
-    uint8_t* macro_body = NULL;
+    uint8_t* arg                            = u8_strtok(token, (uint8_t*)" ", &saveptr);
+    size_t arg_len                          = 0;
+    long num                                = 5;
+    uint8_t* macro_body                     = NULL;
     struct dirent** namelist;
     struct dirent** pnamelist;
     long names_output;
-    BOOL details_open = TRUE;
+    BOOL details_open                       = TRUE;
 
 
     arg = u8_strtok(NULL, (uint8_t*)" ", &saveptr);
@@ -1464,13 +1464,59 @@ process_text_token(uint8_t* line, BOOL first_line_in_doc,
 int
 process_formula(FILE* output, uint8_t* token, BOOL display_formula)
 {
-    uint8_t* command = NULL;
-    int result = 0;
-    CALLOC(command, uint8_t, BUFSIZE)
+    uint8_t* command      = NULL;
+    uint8_t* new_token    = NULL;
+    uint8_t* pnew_token   = NULL;
+    uint8_t* ptoken       = NULL;
+    size_t new_token_size = 0;
+    int result            = 0;
 
-    u8_snprintf(command, BUFSIZE-1, "katex %s<<<'%s'", 
+    CALLOC(command, uint8_t, BUFSIZE)
+    new_token_size = BUFSIZE;
+    CALLOC(new_token, uint8_t, new_token_size)
+    ptoken = token;
+    pnew_token = new_token;
+
+    while (ptoken && *ptoken)
+    {
+        switch (*ptoken)
+        {
+        case '\\':
+            if (ptoken - token + 2 > new_token_size)
+            { 
+                new_token_size += BUFSIZE;
+                REALLOC(new_token, new_token_size)
+            }
+            *pnew_token++ = '\\';
+            *pnew_token++ = *ptoken++; 
+            break;
+
+        case '%':
+            ptoken++;
+            break;
+
+        case '"':
+            if (ptoken - token + 2 > new_token_size)
+            { 
+                new_token_size += BUFSIZE;
+                REALLOC(new_token, new_token_size)
+            }
+            *pnew_token = 0;
+            u8_strncat(pnew_token, (uint8_t*)"\\", 
+                    new_token_size-u8_strlen(new_token)-1);
+            pnew_token++;
+            *pnew_token++ = *ptoken++; 
+            break;
+        default:
+            *pnew_token++ = *ptoken++;
+        }
+    }
+
+    *pnew_token = 0;
+
+    snprintf((char*)command, BUFSIZE-1, "katex %s<<<\"%s\"", 
             display_formula ? "-d " : "",
-            token);
+            new_token);
 
     result = print_command(command, output, TRUE);
     if (result)
@@ -1479,6 +1525,7 @@ process_formula(FILE* output, uint8_t* token, BOOL display_formula)
                 token,
                 display_formula ? "$" : "");
 
+    free(new_token);
     free(command);
     return result;
 }
@@ -2738,8 +2785,9 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 break;
 
             case '\\':
-                if (state & (ST_DISPLAY_FORMULA | ST_FORMULA | ST_HTML_TAG 
-                            | ST_MACRO_BODY))
+                *ptoken = 0;
+                if (state & (ST_DISPLAY_FORMULA | ST_FORMULA 
+                            | ST_HTML_TAG | ST_MACRO_BODY))
                 {
                     CHECKCOPY(token, ptoken, token_size, pline)
                     colno++;
@@ -2861,7 +2909,21 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
             CALLOC(pvars->value, uint8_t, pvars->value_size)
             u8_strncpy(pvars->value, token, pvars->value_size-1);
         }
-        else if (!(state & (ST_DISPLAY_FORMULA | ST_FORMULA)))
+        else if (state & (ST_DISPLAY_FORMULA | ST_FORMULA))
+        {
+            size_t token_len = u8_strlen(token);
+
+            if (ptoken - token + 1 > token_size)
+            {
+                token_size += BUFSIZE;
+                REALLOC(token, token_size)
+            }
+            u8_strncat(token, (uint8_t*)" ", 
+                    token_size - token_len - 1);
+            ptoken++;
+            *ptoken = 0;
+        }
+        else
         {
             if (*token)
             {
