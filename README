@@ -9,10 +9,11 @@ transforms custom Markdown-like syntax into HTML.
                                  Prerequisites
                                  -------------
 
-Aside from the obvious (GCC), slweb requires realpath(1) to determine paths in
-local links and groff(1) and gzip(1) to create and compress documentation.
-git(1) is, aside from cloning the repository, required to use the directive
-{git-log}.
+Aside from the obvious (a C compiler, by default GNU C), slweb requires
+realpath(1) to determine paths in local links and groff(1) and gzip(1) to create
+and compress documentation.  git(1) is, aside from cloning the repository,
+required to use the directive {git-log}. KaTeX (https://katex.org) is optionally
+used for math mode.
 
 
                                     Install

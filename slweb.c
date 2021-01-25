@@ -368,7 +368,7 @@ process_git_log(FILE* output)
     if (print_command(command, output, FALSE))
     {
         print_output(output, "</div><!--git-log-->\n");
-        return error(1, (uint8_t*)"git-log: Cannot run git");
+        return warning(1, (uint8_t*)"git-log: Cannot run git");
     }
     print_output(output, "</div><!--git-log-->\n");
 
@@ -1468,13 +1468,16 @@ process_formula(FILE* output, uint8_t* token, BOOL display_formula)
     int result = 0;
     CALLOC(command, uint8_t, BUFSIZE)
 
-    u8_snprintf(command, BUFSIZE-1, "katex <<<'%s%s'", 
-            display_formula ? "\\displaystyle " : "",
+    u8_snprintf(command, BUFSIZE-1, "katex %s<<<'%s'", 
+            display_formula ? "-d " : "",
             token);
 
     result = print_command(command, output, TRUE);
     if (result)
-        print_output(output, "%s", token);
+        print_output(output, "%s$%s$%s", 
+                display_formula ? "$" : "",
+                token,
+                display_formula ? "$" : "");
 
     free(command);
     return result;
