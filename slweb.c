@@ -281,9 +281,7 @@ print_command(uint8_t* command, FILE* output, BOOL strip_newlines)
                 strip_newlines ? "" : "\n");
     }
     free(cmd_output_line);
-    pclose(cmd_output);
-
-    return 0;
+    return pclose(cmd_output);
 }
 
 int
@@ -1467,15 +1465,19 @@ int
 process_formula(FILE* output, uint8_t* token, BOOL display_formula)
 {
     uint8_t* command = NULL;
+    int result = 0;
     CALLOC(command, uint8_t, BUFSIZE)
 
     u8_snprintf(command, BUFSIZE-1, "katex <<<'%s%s'", 
             display_formula ? "\\displaystyle " : "",
             token);
-    print_command(command, output, TRUE);
+
+    result = print_command(command, output, TRUE);
+    if (result)
+        print_output(output, "%s", token);
 
     free(command);
-    return 0;
+    return result;
 }
 
 int
