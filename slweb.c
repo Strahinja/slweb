@@ -18,7 +18,6 @@
  */
 
 #include "defs.h"
-#include <stdint.h>
 
 static size_t lineno                  = 0;
 static size_t colno                   = 1;
@@ -54,23 +53,26 @@ static ULONG state                    = ST_NONE;
 #define CALLOC(ptr, ptrtype, nmemb) { ptr = calloc(nmemb, sizeof(ptrtype)); \
     CHECKEXITNOMEM(ptr) }
 
-#define REALLOC(ptr, newsize) { ptr = realloc(ptr, newsize); \
-    CHECKEXITNOMEM(ptr) }
+#define REALLOC(ptr, ptrtype, newsize) { ptrtype* newptr = realloc(ptr, newsize); \
+    CHECKEXITNOMEM(newptr) \
+    ptr = newptr; }
 
 #define REALLOCARRAY(ptr, membtype, newcount) { ptr = realloc(ptr, \
         newcount * sizeof(membtype)); CHECKEXITNOMEM(ptr) }
 
 #define CHECKCOPY(token, ptoken, token_size, pline) { \
-    if (ptoken - token + 1 > token_size) \
+    if (ptoken + 2 > token + token_size) \
     { \
+        size_t old_size = token_size; \
         token_size += BUFSIZE; \
-        REALLOC(token, token_size) \
+        REALLOC(token, uint8_t, token_size) \
+        ptoken = token + old_size - 1; \
     } \
     *ptoken++ = *pline++; }
 
 #define RESET_TOKEN(token, ptoken, token_size) { \
     token_size = BUFSIZE; \
-    REALLOC(token, token_size) \
+    REALLOC(token, uint8_t, token_size) \
     *token = 0; ptoken = token; }
 
 int
@@ -181,10 +183,10 @@ set_basedir(char* arg, char** basedir, size_t* basedir_size)
     if (arg_len < 1)
         exit(error(1, (uint8_t*)"--basedir: Argument required"));
 
-    if (arg_len > *basedir_size)
+    if (arg_len + 1 > *basedir_size)
     {
         *basedir_size = arg_len+1;
-        REALLOC(*basedir, *basedir_size)
+        REALLOC(*basedir, char, *basedir_size)
     }
     strncpy(*basedir, arg, *basedir_size-1);
     *(*basedir + arg_len) = 0;
@@ -240,7 +242,7 @@ print_output(FILE* output, char* fmt, ...)
             if (u8_strlen(csv_template) + buf_len > csv_template_size)
             {
                 csv_template_size += BUFSIZE;
-                REALLOC(csv_template, csv_template_size)
+                REALLOC(csv_template, uint8_t, csv_template_size)
             }
             u8_strncat(csv_template, buf, csv_template_size
                     - u8_strlen(csv_template) - 1);
@@ -252,19 +254,61 @@ print_output(FILE* output, char* fmt, ...)
     return 0;
 }
 
+#define PIPE_READ_INDEX  0
+#define PIPE_WRITE_INDEX 1
+
 int
-print_command(uint8_t* command, FILE* output, BOOL strip_newlines)
+print_command(const char* command,
+        const uint8_t* pass_arguments[], const uint8_t* pipe_arguments[],
+        FILE* output, BOOL strip_newlines)
 {
-    if (!command)
+    if (!command || !pass_arguments)
         exit(error(EINVAL, (uint8_t*)"print_command: Invalid argument"));
 
-    FILE* cmd_output = popen((char*)command, "r");
+    pid_t pid = 0;
+    int arg_pipe_fds[2];
+    int output_pipe_fds[2];
+    int pstatus = 0;
 
-    if (!cmd_output)
+    pipe(arg_pipe_fds);
+    pipe(output_pipe_fds);
+    pid = fork();
+    if (pid == 0)
     {
-        perror("popen");
-        return 1;
+        close(arg_pipe_fds[PIPE_WRITE_INDEX]);
+        close(output_pipe_fds[PIPE_READ_INDEX]);
+
+        prctl(PR_SET_PDEATHSIG, SIGTERM);
+
+        dup2(arg_pipe_fds[PIPE_READ_INDEX], STDIN_FILENO);
+        dup2(output_pipe_fds[PIPE_WRITE_INDEX],  STDOUT_FILENO);
+        dup2(output_pipe_fds[PIPE_WRITE_INDEX],  STDERR_FILENO);
+
+        execvp(command, (char* const*)pass_arguments);
+        exit(1);
     }
+    else if (pid < 0)
+        exit(error(errno, (uint8_t*)"Fork failed"));
+
+    /* Parent */
+    close(arg_pipe_fds[PIPE_READ_INDEX]);
+    close(output_pipe_fds[PIPE_WRITE_INDEX]);
+    FILE* cmd_input = fdopen(arg_pipe_fds[PIPE_WRITE_INDEX], "w");
+    FILE* cmd_output = fdopen(output_pipe_fds[PIPE_READ_INDEX], "r");
+
+    if (!cmd_input || !cmd_output)
+        exit(error(1, (uint8_t*)"Cannot fdopen"));
+
+    if (pipe_arguments)
+    {
+        const uint8_t** ppipe_argument = pipe_arguments;
+        while (ppipe_argument && *ppipe_argument)
+        {
+            fprintf(cmd_input, "%s\n", *ppipe_argument);
+            ppipe_argument++;
+        }
+    }
+    fclose(cmd_input);
 
     uint8_t* cmd_output_line = NULL;
     CALLOC(cmd_output_line, uint8_t, BUFSIZE)
@@ -281,7 +325,18 @@ print_command(uint8_t* command, FILE* output, BOOL strip_newlines)
                 strip_newlines ? "" : "\n");
     }
     free(cmd_output_line);
-    return pclose(cmd_output);
+
+    fclose(cmd_output);
+
+    kill(pid, SIGKILL);
+    pid_t wpid = waitpid(pid, &pstatus, 0);
+    if (wpid < 0)
+        warning(pstatus, (uint8_t*)"Child returned nonzero status, errno = %d", 
+                errno);
+    if (WIFEXITED(pstatus))
+        return WEXITSTATUS(pstatus);
+
+    return wpid;
 }
 
 int
@@ -353,26 +408,27 @@ process_git_log(FILE* output)
     size_t basename_size = strlen(input_filename)+1;
     CALLOC(basename, char, basename_size)
     char* slash = strrchr(input_filename, '/');
+    pid_t result = 0;
+
     if (slash)
         strncpy(basename, slash+1, basename_size-1);
     else
         strncpy(basename, input_filename, basename_size-1);
 
+    uint8_t* pipe_args[] = { (uint8_t*)basename, NULL };
+
     print_output(output, "<div id=\"git-log\">\nPrevious commit:\n");
-    uint8_t* command = NULL;
-    CALLOC(command, uint8_t, BUFSIZE)
-    u8_snprintf(command, BUFSIZE-1,
-            "git log -1 --pretty=format:\"%s %%h %%ci (%%cn) %%d\""
-            " || echo \"(Not in a Git repository)\"",
-        basename);
-    if (print_command(command, output, FALSE))
+    result = print_command(CMD_GIT_LOG, 
+            (const uint8_t**)CMD_GIT_LOG_ARGS,
+            (const uint8_t**)pipe_args, output, FALSE);
+
+    if (result)
     {
         print_output(output, "</div><!--git-log-->\n");
-        return warning(1, (uint8_t*)"git-log: Cannot run git");
+        return warning(result, (uint8_t*)"git-log: Cannot run git");
     }
     print_output(output, "</div><!--git-log-->\n");
 
-    free(command);
     free(basename);
 
     return 0;
@@ -1090,7 +1146,7 @@ process_macro(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links,
 
                 if (macros_count > 1)
                 {
-                    REALLOC(macros, macros_count * sizeof(KeyValue))
+                    REALLOC(macros, KeyValue, macros_count * sizeof(KeyValue))
                     pmacros = macros + macros_count - 1;
                 }
                 CALLOC(pmacros->key, uint8_t, KEYSIZE)
@@ -1336,12 +1392,10 @@ process_image(uint8_t* image_text, uint8_t* image_id, FILE* output, BOOL add_lin
 
 int
 process_line_start(uint8_t* line, BOOL first_line_in_doc,
-        BOOL previous_line_blank, BOOL processed_start_of_line,
-        BOOL read_yaml_macros_and_links,  BOOL list_para,
-        FILE* output, uint8_t** token, uint8_t** ptoken)
+        BOOL previous_line_blank, BOOL read_yaml_macros_and_links,  
+        BOOL list_para, FILE* output, uint8_t** token, uint8_t** ptoken)
 {
     if ((first_line_in_doc || previous_line_blank)
-            && !processed_start_of_line
             && !(state & (ST_BLOCKQUOTE | ST_PRE)))
     {
         if (!list_para)
@@ -1381,7 +1435,7 @@ process_inline_footnote(uint8_t* token, BOOL read_yaml_macros_and_links,
         if (inline_footnote_count == 1 && footnote_count > 0)
             warning(1, (u_int8_t*)"Both inline and regular footnotes present");
         else if (inline_footnote_count > 1)
-            REALLOC(inline_footnotes, sizeof(uint8_t*) * inline_footnote_count)
+            REALLOC(inline_footnotes, uint8_t*, sizeof(uint8_t*) * inline_footnote_count)
         CALLOC(inline_footnotes[inline_footnote_count-1], uint8_t, token_len+1)
 
         u8_strncpy(inline_footnotes[inline_footnote_count-1], token, token_len);
@@ -1409,7 +1463,7 @@ process_footnote(uint8_t* token, BOOL footnote_definition, BOOL footnote_output,
             warning(1, (u_int8_t*)"Both inline and regular footnotes present");
         else if (footnote_count > 1)
         {
-            REALLOC(footnotes, footnote_count * sizeof(KeyValue))
+            REALLOC(footnotes, KeyValue, footnote_count * sizeof(KeyValue))
             pfootnotes = footnotes + footnote_count - 1;
         }
         CALLOC(pfootnotes->key, uint8_t, KEYSIZE)
@@ -1448,10 +1502,9 @@ process_text_token(uint8_t* line, BOOL first_line_in_doc,
 {
     if (!(state & ST_YAML))
     {
-        if (add_enclosing_paragraph)
+        if (add_enclosing_paragraph && !processed_start_of_line)
             process_line_start(line, first_line_in_doc, previous_line_blank,
-                    processed_start_of_line, read_yaml_macros_and_links,
-                    list_para, output, token, ptoken);
+                    read_yaml_macros_and_links, list_para, output, token, ptoken);
         **ptoken = 0;
         if (**token && !read_yaml_macros_and_links 
                 && !(state & ST_MACRO_BODY))
@@ -1462,71 +1515,23 @@ process_text_token(uint8_t* line, BOOL first_line_in_doc,
 }
 
 int
-process_formula(FILE* output, uint8_t* token, BOOL display_formula)
+process_formula(FILE* output, const uint8_t* token, BOOL display_formula)
 {
-    uint8_t* command      = NULL;
-    uint8_t* new_token    = NULL;
-    uint8_t* pnew_token   = NULL;
-    uint8_t* ptoken       = NULL;
-    size_t new_token_size = 0;
-    int result            = 0;
+    int result           = 0;
+    const uint8_t* pipe_args[] = { token, NULL};
 
-    CALLOC(command, uint8_t, BUFSIZE)
-    new_token_size = BUFSIZE;
-    CALLOC(new_token, uint8_t, new_token_size)
-    ptoken = token;
-    pnew_token = new_token;
+    result = print_command(CMD_KATEX, 
+            display_formula 
+                ? (const uint8_t**)CMD_KATEX_DISPLAY_ARGS 
+                : (const uint8_t**)CMD_KATEX_INLINE_ARGS,
+            (const uint8_t**)pipe_args, output, TRUE);
 
-    while (ptoken && *ptoken)
-    {
-        switch (*ptoken)
-        {
-        case '\\':
-            if (ptoken - token + 2 > new_token_size)
-            { 
-                new_token_size += BUFSIZE;
-                REALLOC(new_token, new_token_size)
-            }
-            *pnew_token++ = '\\';
-            *pnew_token++ = *ptoken++; 
-            break;
-
-        case '%':
-            ptoken++;
-            break;
-
-        case '"':
-            if (ptoken - token + 2 > new_token_size)
-            { 
-                new_token_size += BUFSIZE;
-                REALLOC(new_token, new_token_size)
-            }
-            *pnew_token = 0;
-            u8_strncat(pnew_token, (uint8_t*)"\\", 
-                    new_token_size-u8_strlen(new_token)-1);
-            pnew_token++;
-            *pnew_token++ = *ptoken++; 
-            break;
-        default:
-            *pnew_token++ = *ptoken++;
-        }
-    }
-
-    *pnew_token = 0;
-
-    snprintf((char*)command, BUFSIZE-1, "katex %s<<<\"%s\"", 
-            display_formula ? "-d " : "",
-            new_token);
-
-    result = print_command(command, output, TRUE);
     if (result)
         print_output(output, "%s$%s$%s", 
                 display_formula ? "$" : "",
                 token,
                 display_formula ? "$" : "");
 
-    free(new_token);
-    free(command);
     return result;
 }
 
@@ -1657,7 +1662,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
     BOOL first_line_in_doc             = TRUE;
     BOOL skip_change_first_line_in_doc = FALSE;
     BOOL skip_eol                      = FALSE;
-    BOOL reset_token                   = TRUE;
+    BOOL keep_token                    = FALSE;
     BOOL previous_line_blank           = FALSE;
     BOOL processed_start_of_line       = FALSE;
     BOOL add_image_links               = TRUE;
@@ -1782,7 +1787,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 {
                     skip_eol = TRUE;
 
-                    if (yaml_parsed)
+                    if (yaml_parsed && !read_yaml_macros_and_links)
                     {
                         process_horizontal_rule(output);
                         pline = NULL;
@@ -2070,9 +2075,8 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                         && pline_len > 1 && *(pline+1) == '[')
                 {
                     process_line_start(line, first_line_in_doc,
-                            previous_line_blank, processed_start_of_line,
-                            read_yaml_macros_and_links, list_para, output,
-                            &token, &ptoken);
+                            previous_line_blank, read_yaml_macros_and_links, 
+                            list_para, output, &token, &ptoken);
 
                     /* Ignore abbreviations (for now) */
                     pline = NULL;
@@ -2081,7 +2085,8 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                         && pline_len > 2 && startswith((char*)pline, "***"))
                 {
                     skip_eol = TRUE;
-                    process_horizontal_rule(output);
+                    if (!read_yaml_macros_and_links)
+                        process_horizontal_rule(output);
                     pline = NULL;
                 }
                 else if (pline_len > 1 && *(pline+1) == '*')
@@ -2253,7 +2258,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                             if (pmacros->value_size < value_len + token_len + 1)
                             {
                                 pmacros->value_size += token_len;
-                                REALLOC(pmacros->value, pmacros->value_size)
+                                REALLOC(pmacros->value, uint8_t, pmacros->value_size)
                             }
                             u8_strncat(pmacros->value, token, pmacros->value_size-1);
                         }
@@ -2726,7 +2731,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                                 if (token_len + 1 > link_size)
                                 {
                                     link_size = token_len+1;
-                                    REALLOC(link_text, link_size)
+                                    REALLOC(link_text, uint8_t, link_size)
                                 }
                             }
                             else
@@ -2750,6 +2755,11 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                             state &= ~(ST_LINK | ST_IMAGE);
                             break;
                     }
+                }
+                else
+                {
+                    CHECKCOPY(token, ptoken, token_size, pline)
+                    colno++;
                 }
                 break;
 
@@ -2834,13 +2844,13 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                                 read_yaml_macros_and_links,
                                 list_para, output, &token, &ptoken, &token_size, 
                                 TRUE);
-                        processed_start_of_line = TRUE;
                     }
+                    processed_start_of_line = TRUE;
 
                     state ^= ST_DISPLAY_FORMULA;
 
                     if (state & ST_DISPLAY_FORMULA)
-                        reset_token = FALSE;
+                        keep_token = TRUE;
                     else
                     {
                         *ptoken = 0;
@@ -2848,8 +2858,8 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                         if (!read_yaml_macros_and_links)
                             process_formula(output, token, TRUE);
 
+                        keep_token = FALSE;
                         RESET_TOKEN(token, ptoken, token_size)
-                        reset_token = TRUE;
                     }
 
                     pline += 2;
@@ -2870,13 +2880,13 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                                 read_yaml_macros_and_links,
                                 list_para, output, &token, &ptoken, &token_size, 
                                 TRUE);
-                        processed_start_of_line = TRUE;
                     }
+                    processed_start_of_line = TRUE;
 
                     state ^= ST_FORMULA;
 
                     if (state & ST_FORMULA)
-                        reset_token = FALSE;
+                        keep_token = TRUE;
                     else
                     {
                         *ptoken = 0;
@@ -2884,8 +2894,8 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                         if (!read_yaml_macros_and_links)
                             process_formula(output, token, FALSE);
 
+                        keep_token = FALSE;
                         RESET_TOKEN(token, ptoken, token_size)
-                        reset_token = TRUE;
                     }
 
                     pline++;
@@ -2913,10 +2923,12 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
         {
             size_t token_len = u8_strlen(token);
 
-            if (ptoken - token + 1 > token_size)
+            if (ptoken + 2 > token + token_size)
             {
+                size_t old_size = token_size;
                 token_size += BUFSIZE;
-                REALLOC(token, token_size)
+                REALLOC(token, uint8_t, token_size)
+                ptoken = token + old_size - 1;
             }
             u8_strncat(token, (uint8_t*)" ", 
                     token_size - token_len - 1);
@@ -2938,10 +2950,10 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                         {
                             size_t value_len = u8_strlen(pmacros->value);
 
-                            if (sizeof(pmacros->value) < value_len + token_len + 1)
+                            if (pmacros->value_size < value_len + token_len + 1)
                             {
                                 pmacros->value_size += BUFSIZE;
-                                REALLOC(pmacros->value, pmacros->value_size)
+                                REALLOC(pmacros->value, uint8_t, pmacros->value_size)
                             }
                             u8_strncat(pmacros->value, token, 
                                     pmacros->value_size-value_len-1);
@@ -2967,10 +2979,10 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                         {
                             size_t value_len = u8_strlen(pfootnotes->value);
 
-                            if (sizeof(pfootnotes->value) < value_len + token_len + 1)
+                            if (pfootnotes->value_size < value_len + token_len + 1)
                             {
                                 pfootnotes->value_size += BUFSIZE;
-                                REALLOC(pfootnotes->value, pfootnotes->value_size)
+                                REALLOC(pfootnotes->value, uint8_t, pfootnotes->value_size)
                             }
                             u8_strncat(pfootnotes->value, token,
                                     pfootnotes->value_size-value_len-1);
@@ -3005,7 +3017,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                     RESET_TOKEN(token, ptoken, token_size)
                     heading_level = 0;
                 }
-                else 
+                else if (!(state & (ST_DISPLAY_FORMULA | ST_FORMULA)))
                     process_text_token(line, first_line_in_doc,
                             previous_line_blank,
                             processed_start_of_line,
@@ -3055,7 +3067,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                             if (pmacros->value_size < value_len + token_len + 1)
                             {
                                 pmacros->value_size += token_len;
-                                REALLOC(pmacros->value, pmacros->value_size)
+                                REALLOC(pmacros->value, uint8_t, pmacros->value_size)
                             }
                             u8_strncat(pmacros->value, token, pmacros->value_size-1);
                         }
@@ -3084,7 +3096,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                         | ST_LINK_SECOND_ARG)))
                 print_output(output, "\n");
 
-        if (reset_token)
+        if (!keep_token)
             RESET_TOKEN(token, ptoken, token_size)
 
         if (!skip_change_first_line_in_doc
@@ -3237,7 +3249,7 @@ main(int argc, char** argv)
             if (buffer_len + bufline_len + 1 > buffer_size)
             {
                 buffer_size += BUFSIZE;
-                REALLOC(buffer, buffer_size)
+                REALLOC(buffer, uint8_t, buffer_size)
             }
             u8_strncat(buffer, bufline, buffer_size-buffer_len-1);
             buffer_len += bufline_len;

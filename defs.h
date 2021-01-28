@@ -29,6 +29,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/prctl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -38,15 +39,25 @@
 #include <uniwidth.h>
 
 #define PROGRAMNAME   "slweb"
-#define VERSION       "0.3.6"
+#define VERSION       "0.3.7"
 #define COPYRIGHTYEAR "2020, 2021"
 
 #define BUFSIZE       1024
 #define KEYSIZE       256
+#define SMALL_ARGSIZE 256
 #define DATEBUFSIZE   12
 
 static const char timestamp_format[]     = "d.m.y";
 static const char timestamp_output_ext[] = ".html";
+
+static const char CMD_GIT_LOG[]          = "xargs";
+static const char* CMD_GIT_LOG_ARGS[]    
+    = { "xargs", "-I{}", "git", "log", "-1", 
+        "--pretty=format:{} %h %ci (%cn) %d", NULL };
+
+static const char CMD_KATEX[]               = "katex";
+static const char* CMD_KATEX_INLINE_ARGS[]  = { "katex", NULL };
+static const char* CMD_KATEX_DISPLAY_ARGS[] = { "katex", "-d", NULL };
 
 typedef enum
 {
