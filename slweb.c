@@ -2925,7 +2925,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 REALLOC(token, uint8_t, token_size)
                 ptoken = token + old_size - 1;
             }
-            u8_strncat(token, (uint8_t*)" ", 
+            u8_strncat(token, (uint8_t*)"\n", 
                     token_size - token_len - 1);
             ptoken++;
             *ptoken = 0;
