@@ -422,16 +422,11 @@ process_git_log(FILE* output)
             (const uint8_t**)CMD_GIT_LOG_ARGS,
             (const uint8_t**)pipe_args, output, FALSE);
 
-    if (result)
-    {
-        print_output(output, "</div><!--git-log-->\n");
-        return warning(result, (uint8_t*)"git-log: Cannot run git");
-    }
     print_output(output, "</div><!--git-log-->\n");
 
     free(basename);
 
-    return 0;
+    return result ? warning(result, (uint8_t*)"git-log: Cannot run git") : 0;
 }
 
 int
