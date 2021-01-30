@@ -57,8 +57,8 @@ static ULONG state                    = ST_NONE;
     CHECKEXITNOMEM(newptr) \
     ptr = newptr; }
 
-#define REALLOCARRAY(ptr, membtype, newcount) { ptr = realloc(ptr, \
-        newcount * sizeof(membtype)); CHECKEXITNOMEM(ptr) }
+#define REALLOCARRAY(ptr, membtype, newcount) \
+    REALLOC(ptr, membtype, sizeof(membtype) * newcount)
 
 #define CHECKCOPY(token, ptoken, token_size, pline) { \
     if (ptoken + 2 > token + token_size) \
@@ -114,6 +114,23 @@ warning(int code, uint8_t* fmt, ...)
     va_end(args);
     fprintf(stderr, "Warning: %s\n", buf);
     return code;
+}
+
+int
+free_keyvalue(KeyValue** list, size_t list_count)
+{
+    if (!list || !*list)
+        return 1;
+
+    for (size_t index = 0; index < list_count; index++)
+    {
+        KeyValue* current = *list + index;
+        if (current->value)
+            free(current->value);
+        if (current->key)
+            free(current->key);
+    }
+    return 0;
 }
 
 int
@@ -282,7 +299,6 @@ print_command(const char* command,
 
         dup2(arg_pipe_fds[PIPE_READ_INDEX], STDIN_FILENO);
         dup2(output_pipe_fds[PIPE_WRITE_INDEX],  STDOUT_FILENO);
-        dup2(output_pipe_fds[PIPE_WRITE_INDEX],  STDERR_FILENO);
 
         execvp(command, (char* const*)pass_arguments);
         exit(1);
@@ -375,6 +391,8 @@ read_file_into_buffer(uint8_t** buffer, size_t* buffer_size, char* input_filenam
         CALLOC(*input_dirname, char, 2)
         **input_dirname = '.';
     }
+
+    fclose(*input);
 
     return 0;
 }
@@ -1164,7 +1182,8 @@ process_tag(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links,
         BOOL* skip_eol, BOOL end_tag)
 {
     if (!token || u8_strlen(token) < 1)
-        return warning(1, (uint8_t*)"Empty tag name");
+        return warning(1, (uint8_t*)"%s:%ld:%ld: Empty tag name",
+                input_filename, lineno, colno);
 
     if (!strcmp((char*)token, "git-log")
             && !read_yaml_macros_and_links)   /* {git-log} */
@@ -1361,8 +1380,11 @@ process_link(uint8_t* link_text, uint8_t* link_macro_body, uint8_t* link_id,
 
 int
 process_inline_image(uint8_t* image_text, uint8_t* image_url, FILE* output,
-        BOOL add_link)
+        BOOL add_link, BOOL add_figcaption)
 {
+    if (add_figcaption)
+        print_output(output, "<figure>\n");
+
     if (add_link)
         print_output(output, "<a href=\"%s\" title=\"%s\" class=\"image\""
                 " target=\"_blank\">",
@@ -1375,14 +1397,20 @@ process_inline_image(uint8_t* image_text, uint8_t* image_url, FILE* output,
 
     if (add_link)
         print_output(output, "</a>");
+
+    if (add_figcaption)
+        print_output(output, "<figcaption>%s</figcaption>\n</figure>\n",
+                image_text);
     return 0;
 }
 
 int
-process_image(uint8_t* image_text, uint8_t* image_id, FILE* output, BOOL add_link)
+process_image(uint8_t* image_text, uint8_t* image_id, FILE* output, 
+        BOOL add_link, BOOL add_figcaption)
 {
     uint8_t* url = get_value(links, links_count, image_id, NULL);
-    return process_inline_image(image_text, url, output, add_link);
+    return process_inline_image(image_text, url, output, add_link,
+            add_figcaption);
 }
 
 int
@@ -1404,15 +1432,38 @@ process_line_start(uint8_t* line, BOOL first_line_in_doc,
 
             if (state & ST_FOOTNOTE_TEXT)
             {
-                state &= ~ST_FOOTNOTE_TEXT;
-                if (!read_yaml_macros_and_links)
+                if (!read_yaml_macros_and_links && (state & ST_PARA_OPEN))
                     print_output(output, "</p>\n");
+                state &= ~(ST_FOOTNOTE_TEXT | ST_PARA_OPEN);
             }
         }
         if (!read_yaml_macros_and_links)
             print_output(output, "<p>");
         state |= ST_PARA_OPEN;
     }
+    return 0;
+}
+
+int
+process_text_token(uint8_t* line, BOOL first_line_in_doc,
+        BOOL previous_line_blank,
+        BOOL processed_start_of_line,
+        BOOL read_yaml_macros_and_links, BOOL list_para,
+        FILE* output, uint8_t** token,
+        uint8_t** ptoken, size_t* token_size,
+        BOOL add_enclosing_paragraph)
+{
+    if (!(state & ST_YAML))
+    {
+        if (add_enclosing_paragraph && !processed_start_of_line)
+            process_line_start(line, first_line_in_doc, previous_line_blank,
+                    read_yaml_macros_and_links, list_para, output, token, ptoken);
+        **ptoken = 0;
+        if (**token && !read_yaml_macros_and_links 
+                && !(state & ST_MACRO_BODY))
+            print_output(output, "%s", *token);
+    }
+    RESET_TOKEN(*token, *ptoken, *token_size)
     return 0;
 }
 
@@ -1478,34 +1529,12 @@ process_footnote(uint8_t* token, BOOL footnote_definition, BOOL footnote_output,
 int
 process_horizontal_rule(FILE* output)
 {
+    /* Temporarily break paragraph as hr is para-level */
     if (state & ST_PARA_OPEN)
         print_output(output, "</p>\n");
     print_output(output, "<hr />\n");
     if (state & ST_PARA_OPEN)
         print_output(output, "<p>\n");
-    return 0;
-}
-
-int
-process_text_token(uint8_t* line, BOOL first_line_in_doc,
-        BOOL previous_line_blank,
-        BOOL processed_start_of_line,
-        BOOL read_yaml_macros_and_links, BOOL list_para,
-        FILE* output, uint8_t** token,
-        uint8_t** ptoken, size_t* token_size,
-        BOOL add_enclosing_paragraph)
-{
-    if (!(state & ST_YAML))
-    {
-        if (add_enclosing_paragraph && !processed_start_of_line)
-            process_line_start(line, first_line_in_doc, previous_line_blank,
-                    read_yaml_macros_and_links, list_para, output, token, ptoken);
-        **ptoken = 0;
-        if (**token && !read_yaml_macros_and_links 
-                && !(state & ST_MACRO_BODY))
-            print_output(output, "%s", *token);
-    }
-    RESET_TOKEN(*token, *ptoken, *token_size)
     return 0;
 }
 
@@ -1641,6 +1670,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
     uint8_t* permalink_url             = NULL;
     uint8_t* ext_in_permalink          = NULL;
     uint8_t* var_add_image_links       = NULL;
+    uint8_t* var_add_figcaption        = NULL;
     uint8_t* var_add_footnote_div      = NULL;
     uint8_t* pbuffer                   = NULL;
     uint8_t* line                      = NULL;
@@ -1661,9 +1691,10 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
     BOOL previous_line_blank           = FALSE;
     BOOL processed_start_of_line       = FALSE;
     BOOL add_image_links               = TRUE;
+    BOOL add_figcaption                = TRUE;
     BOOL add_footnote_div              = FALSE;
     BOOL list_para                     = FALSE;
-    BOOL yaml_parsed                   = FALSE;
+    BOOL footnote_at_line_start        = FALSE;
     size_t pline_len                   = 0;
 
     if (!buffer)
@@ -1686,6 +1717,8 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
     ext_in_permalink = get_value(vars, vars_count, (uint8_t*)"ext-in-permalink", NULL);
     var_add_image_links = get_value(vars, vars_count, (uint8_t*)"add-image-links", NULL);
     add_image_links = !(var_add_image_links && *var_add_image_links == '0');
+    var_add_figcaption = get_value(vars, vars_count, (uint8_t*)"add-figcaption", NULL);
+    add_figcaption = !(var_add_figcaption && *var_add_figcaption == '0');
     var_add_footnote_div = get_value(vars, vars_count, (uint8_t*)"add-footnote-div", NULL);
     add_footnote_div = var_add_footnote_div && *var_add_footnote_div == '1';
 
@@ -1782,22 +1815,20 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 {
                     skip_eol = TRUE;
 
-                    if (yaml_parsed && !read_yaml_macros_and_links)
-                    {
+                    if (!(state & ST_YAML) 
+                            && lineno > 1
+                            && !read_yaml_macros_and_links)
                         process_horizontal_rule(output);
-                        pline = NULL;
-                        break;
+                    else
+                    {
+                        if (lineno == 1)
+                            state |= ST_YAML;
+                        else
+                            state &= ~ST_YAML;
+
+                        skip_change_first_line_in_doc = TRUE;
                     }
-
-                    state ^= ST_YAML;
-
-                    if (!(state & ST_YAML))
-                        yaml_parsed = TRUE;
-
-                    skip_change_first_line_in_doc = TRUE;
-
-                    pline += 3;
-                    colno += 3;
+                    pline = NULL;
                 }
                 else if (colno == 1 
                         && u8_strlen(pline) > 1
@@ -1829,8 +1860,8 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
             case ':':
                 if (state & ST_YAML
                         && !(state & (ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
-                                | ST_HEADING | ST_MACRO_BODY | ST_PRE | ST_TAG 
-                                | ST_YAML_VAL))
+                                | ST_HEADING | ST_IMAGE | ST_MACRO_BODY 
+                                | ST_PRE | ST_TAG | ST_YAML_VAL))
                         && read_yaml_macros_and_links)
                 {
                     *ptoken = 0;
@@ -1865,7 +1896,8 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 break;
 
             case '`':
-                if (state & (ST_DISPLAY_FORMULA | ST_FORMULA | ST_MACRO_BODY))
+                if (state & (ST_DISPLAY_FORMULA | ST_FORMULA | ST_IMAGE 
+                            | ST_MACRO_BODY))
                 {
                     CHECKCOPY(token, ptoken, token_size, pline)
                     colno++;
@@ -1964,8 +1996,8 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
 
             case '_':
                 if (state & (ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
-                            | ST_HTML_TAG | ST_MACRO_BODY | ST_PRE | ST_TAG 
-                            | ST_YAML))
+                            | ST_HTML_TAG | ST_IMAGE | ST_MACRO_BODY | ST_PRE 
+                            | ST_TAG | ST_YAML))
                 {
                     CHECKCOPY(token, ptoken, token_size, pline)
                     colno++;
@@ -2058,7 +2090,8 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
 
             case '*':
                 if (state & (ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
-                            | ST_HTML_TAG | ST_MACRO_BODY | ST_PRE | ST_YAML))
+                            | ST_HTML_TAG | ST_IMAGE | ST_MACRO_BODY | ST_PRE 
+                            | ST_YAML))
                 {
                     CHECKCOPY(token, ptoken, token_size, pline)
                     colno++;
@@ -2171,7 +2204,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
 
             case ' ':
                 if (state & (ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
-                            | ST_MACRO_BODY | ST_PRE | ST_YAML_VAL))
+                            | ST_IMAGE | ST_MACRO_BODY | ST_PRE | ST_YAML_VAL))
                 {
                     CHECKCOPY(token, ptoken, token_size, pline)
                     colno++;
@@ -2284,7 +2317,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
 
             case '/':
                 if (state & (ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
-                            | ST_PRE | ST_HEADING | ST_YAML_VAL))
+                            | ST_IMAGE | ST_PRE | ST_HEADING | ST_YAML_VAL))
                 {
                     CHECKCOPY(token, ptoken, token_size, pline)
                     colno++;
@@ -2304,7 +2337,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
 
             case '}':
                 if (state & (ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
-                            | ST_PRE | ST_YAML | ST_YAML_VAL))
+                            | ST_IMAGE | ST_PRE | ST_YAML | ST_YAML_VAL))
                 {
                     CHECKCOPY(token, ptoken, token_size, pline)
                     colno++;
@@ -2329,7 +2362,8 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
 
             case '|':
                 if (state & (ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
-                            | ST_HTML_TAG | ST_PRE | ST_TAG | ST_YAML))
+                            | ST_HTML_TAG | ST_IMAGE | ST_PRE | ST_TAG 
+                            | ST_YAML))
                 {
                     CHECKCOPY(token, ptoken, token_size, pline)
                     colno++;
@@ -2388,7 +2422,8 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
 
             case '<':
                 if (read_yaml_macros_and_links
-                        || (state & (ST_DISPLAY_FORMULA | ST_FORMULA)))
+                        || (state & (ST_DISPLAY_FORMULA | ST_FORMULA 
+                                | ST_IMAGE)))
                 {
                     CHECKCOPY(token, ptoken, token_size, pline)
                     colno++;
@@ -2416,7 +2451,8 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 if (state & ST_HTML_TAG)
                     state &= ~ST_HTML_TAG;
 
-                if (state & (ST_DISPLAY_FORMULA | ST_FORMULA | ST_MACRO_BODY))
+                if (state & (ST_DISPLAY_FORMULA | ST_FORMULA | ST_IMAGE 
+                            | ST_MACRO_BODY))
                 {
                     CHECKCOPY(token, ptoken, token_size, pline)
                     colno++;
@@ -2445,7 +2481,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
 
             case '!':
                 if (state & (ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
-                            | ST_FOOTNOTE_TEXT | ST_HEADING 
+                            | ST_FOOTNOTE_TEXT | ST_HEADING | ST_IMAGE
                             | ST_INLINE_FOOTNOTE | ST_LINK | ST_MACRO_BODY 
                             | ST_PRE))
                 {
@@ -2467,6 +2503,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                     RESET_TOKEN(token, ptoken, token_size)
 
                     state |= ST_IMAGE;
+                    keep_token = TRUE;
                     pline += 2;
                     colno += 2;
                 }
@@ -2504,21 +2541,32 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 pline_len = u8_strlen(pline);
 
                 if (state & (ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
-                            | ST_HEADING | ST_MACRO_BODY | ST_PRE))
+                            | ST_HEADING | ST_IMAGE | ST_MACRO_BODY | ST_PRE))
                 {
                     CHECKCOPY(token, ptoken, token_size, pline)
                     colno++;
                     break;
                 }
 
+                if (state & ST_FOOTNOTE_TEXT)
+                {
+                    if (!read_yaml_macros_and_links && (state & ST_PARA_OPEN))
+                        print_output(output, "</p>\n");
+                    state &= ~(ST_FOOTNOTE_TEXT | ST_PARA_OPEN);
+                }
+
                 if (pline_len > 1 && *(pline+1) == '^')
                 {
-                    /* Output existing text up to [^ */
-                    *ptoken = 0;
-                    process_text_token(line, first_line_in_doc,
-                            previous_line_blank, processed_start_of_line,
-                            read_yaml_macros_and_links, list_para, output,
-                            &token, &ptoken, &token_size, TRUE);
+                    footnote_at_line_start = colno == 1;
+                    if (*token)
+                    {
+                        /* Output existing text up to [^ */
+                        *ptoken = 0;
+                        process_text_token(line, first_line_in_doc,
+                                previous_line_blank, processed_start_of_line,
+                                read_yaml_macros_and_links, list_para, output,
+                                &token, &ptoken, &token_size, TRUE);
+                    }
                     processed_start_of_line = TRUE;
 
                     RESET_TOKEN(token, ptoken, token_size)
@@ -2529,27 +2577,29 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 }
 
                 if (*token)
+                {
                     /* Output existing text up to [ */
+                    *ptoken = 0;
                     process_text_token(line, first_line_in_doc,
                             previous_line_blank,
                             processed_start_of_line,
                             read_yaml_macros_and_links,
                             list_para, output, &token, &ptoken, &token_size, 
                             TRUE);
+                }
                 processed_start_of_line = TRUE;
 
                 RESET_TOKEN(token, ptoken, token_size)
-
                 state |= ST_LINK;
+                keep_token = TRUE;
                 *link_macro = 0;
-
                 pline++;
                 colno++;
                 break;
 
             case '(':
                 if (state & (ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
-                            | ST_FOOTNOTE_TEXT | ST_HEADING 
+                            | ST_FOOTNOTE_TEXT | ST_HEADING
                             | ST_INLINE_FOOTNOTE | ST_MACRO_BODY | ST_PRE))
                     CHECKCOPY(token, ptoken, token_size, pline)
                 else if (state & ST_LINK)
@@ -2616,7 +2666,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                                     token, output);
                         else
                             process_inline_image(link_text, token, output, 
-                                    add_image_links);
+                                    add_image_links, add_figcaption);
                     }
                     RESET_TOKEN(token, ptoken, token_size)
                     state &= ~(ST_LINK | ST_LINK_SECOND_ARG 
@@ -2651,7 +2701,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 else if (state & ST_FOOTNOTE)
                 {
                     BOOL footnote_definition = (u8_strlen(pline) > 1)
-                            && (*(pline+1) == ':');
+                            && (*(pline+1) == ':') && footnote_at_line_start;
 
                     process_footnote(token, 
                             footnote_definition && read_yaml_macros_and_links,
@@ -2660,6 +2710,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
 
                     RESET_TOKEN(token, ptoken, token_size)
                     state &= ~ST_FOOTNOTE;
+                    footnote_at_line_start = FALSE;
                     if (footnote_definition)
                     {
                         state |= ST_FOOTNOTE_TEXT;
@@ -2684,7 +2735,8 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 else if (state & ST_IMAGE_SECOND_ARG)
                 {
                     if (!read_yaml_macros_and_links)
-                        process_image(link_text, token, output, add_image_links);
+                        process_image(link_text, token, output, 
+                                add_image_links, add_figcaption);
                     RESET_TOKEN(token, ptoken, token_size)
                     state &= ~(ST_IMAGE | ST_IMAGE_SECOND_ARG);
                     pline++;
@@ -2715,6 +2767,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                                 colno++;
                             }
                             RESET_TOKEN(token, ptoken, token_size)
+                            keep_token = FALSE;
                             state |= ST_LINK_SECOND_ARG;
                             break;
 
@@ -2739,6 +2792,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                             pline += 2;
                             colno += 2;
                             RESET_TOKEN(token, ptoken, token_size)
+                            keep_token = FALSE;
                             if (state & ST_LINK)
                                 state |= ST_LINK_SECOND_ARG;
                             else
@@ -2760,8 +2814,8 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
 
             case '^':
                 if (state & (ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
-                            | ST_FOOTNOTE_TEXT | ST_INLINE_FOOTNOTE | ST_PRE 
-                            | ST_YAML))
+                            | ST_FOOTNOTE_TEXT | ST_IMAGE | ST_INLINE_FOOTNOTE 
+                            | ST_PRE | ST_YAML))
                 {
                     CHECKCOPY(token, ptoken, token_size, pline)
                     colno++;
@@ -2792,7 +2846,8 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
             case '\\':
                 *ptoken = 0;
                 if (state & (ST_DISPLAY_FORMULA | ST_FORMULA 
-                            | ST_HTML_TAG | ST_MACRO_BODY))
+                            | ST_HTML_TAG | ST_IMAGE | ST_LINK 
+                            | ST_MACRO_BODY))
                 {
                     CHECKCOPY(token, ptoken, token_size, pline)
                     colno++;
@@ -2816,7 +2871,8 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 break;
 
             case '$':
-                if (state & (ST_CODE | ST_CSV_BODY | ST_PRE | ST_YAML))
+                if (state & (ST_CODE | ST_CSV_BODY | ST_IMAGE | ST_PRE 
+                            | ST_YAML))
                 {
                     CHECKCOPY(token, ptoken, token_size, pline)
                     colno++;
@@ -2914,7 +2970,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
             CALLOC(pvars->value, uint8_t, pvars->value_size)
             u8_strncpy(pvars->value, token, pvars->value_size-1);
         }
-        else if (state & (ST_DISPLAY_FORMULA | ST_FORMULA))
+        else if (keep_token)
         {
             size_t token_len = u8_strlen(token);
 
@@ -2925,7 +2981,8 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 REALLOC(token, uint8_t, token_size)
                 ptoken = token + old_size - 1;
             }
-            u8_strncat(token, (uint8_t*)"\n", 
+            u8_strncat(token, (state & (ST_IMAGE | ST_LINK))
+                        ? (uint8_t*)" " : (uint8_t*)"\n", 
                     token_size - token_len - 1);
             ptoken++;
             *ptoken = 0;
@@ -3012,7 +3069,8 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                     RESET_TOKEN(token, ptoken, token_size)
                     heading_level = 0;
                 }
-                else if (!(state & (ST_DISPLAY_FORMULA | ST_FORMULA)))
+                else if (!(state & (ST_DISPLAY_FORMULA | ST_FORMULA 
+                                | ST_IMAGE | ST_LINK)))
                     process_text_token(line, first_line_in_doc,
                             previous_line_blank,
                             processed_start_of_line,
@@ -3021,7 +3079,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                             TRUE);
             }
 
-            if (!(state & (ST_PRE | ST_LINK_SECOND_ARG))
+            if (!(state & (ST_PRE | ST_IMAGE_SECOND_ARG | ST_LINK_SECOND_ARG))
                         && (!*pbuffer || *pbuffer == '\n'))
             {
                 if (state & ST_PARA_OPEN)
@@ -3045,8 +3103,6 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
 
                 if (!*pbuffer && (state & ST_FOOTNOTE_TEXT))
                 {
-                    if (!read_yaml_macros_and_links)
-                        print_output(output, "</p>\n");
                     state &= ~ST_FOOTNOTE_TEXT;
 
                     *ptoken = 0;
@@ -3055,22 +3111,23 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                     skip_eol = TRUE;
                     if (read_yaml_macros_and_links)
                     {
-                        if (pmacros->value)
+                        if (pfootnotes->value)
                         {
-                            size_t value_len = u8_strlen(pmacros->value);
+                            size_t value_len = u8_strlen(pfootnotes->value);
 
-                            if (pmacros->value_size < value_len + token_len + 1)
+                            if (pfootnotes->value_size < value_len + token_len + 1)
                             {
-                                pmacros->value_size += token_len;
-                                REALLOC(pmacros->value, uint8_t, pmacros->value_size)
+                                pfootnotes->value_size 
+                                    = value_len + token_len + 1;
+                                REALLOC(pfootnotes->value, uint8_t, pfootnotes->value_size)
                             }
-                            u8_strncat(pmacros->value, token, pmacros->value_size-1);
+                            u8_strncat(pfootnotes->value, token, pfootnotes->value_size-1);
                         }
                         else
                         {
-                            pmacros->value_size = token_len+1;
-                            CALLOC(pmacros->value, uint8_t, pmacros->value_size)
-                            u8_strncpy(pmacros->value, token, pmacros->value_size-1);
+                            pfootnotes->value_size = token_len + 1;
+                            CALLOC(pfootnotes->value, uint8_t, pfootnotes->value_size)
+                            u8_strncpy(pfootnotes->value, token, pfootnotes->value_size-1);
                         }
                     }
                 }
@@ -3086,7 +3143,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
             previous_line_blank = FALSE;
         }
 
-        if (!skip_eol && !read_yaml_macros_and_links 
+        if (!skip_eol && !keep_token && !read_yaml_macros_and_links 
                 && !(state & (ST_YAML | ST_YAML_VAL 
                         | ST_LINK_SECOND_ARG)))
                 print_output(output, "\n");
@@ -3103,7 +3160,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
             previous_line_blank = TRUE;
 
         /* Lasts until the end of line */
-        state &= ~(ST_YAML_VAL | ST_LINK | ST_LINK_SECOND_ARG);
+        state &= ~(ST_YAML_VAL | ST_IMAGE_SECOND_ARG | ST_LINK_SECOND_ARG);
     }
     while (pbuffer && *pbuffer);
 
@@ -3292,6 +3349,20 @@ main(int argc, char** argv)
     /* Second pass: parse and output */
     result = slweb_parse(buffer, output, body_only, FALSE);
 
+    if (basedir)
+        free(basedir);
+    if (input_dirname)
+        free(input_dirname);
+    if (inline_footnotes)
+        free(inline_footnotes);
+    free_keyvalue(&footnotes, footnote_count);
+    free_keyvalue(&links, links_count);
+    free_keyvalue(&macros, macros_count);
+    free_keyvalue(&vars, vars_count);
+    free(footnotes);
+    free(links);
+    free(macros);
+    free(vars);
     free(buffer);
 
     return result;
