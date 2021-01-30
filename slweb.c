@@ -1815,8 +1815,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 {
                     skip_eol = TRUE;
 
-                    if (!(state & ST_YAML) 
-                            && lineno > 1
+                    if (!(state & ST_YAML) && lineno > 1
                             && !read_yaml_macros_and_links)
                         process_horizontal_rule(output);
                     else

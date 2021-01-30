@@ -231,9 +231,11 @@ images can be added by using:
 Which will produce:
 .
 .CDS 8
-<a href="/path/to/image.png" title="Some title" 
-    class="image" target="_blank"><img src="/path/to/image.png" 
-    alt="Some title" /></a>
+<figure>
+<a href="/path/to/image.png" title="Some title" class="image"
+  target="_blank"><img src="/path/to/image.png" alt="Some title" 
+  /></a><figcaption>Some title</figcaption>
+</figure>
 .CDE
 .
 .IP
@@ -242,8 +244,11 @@ used, using the image id instead of the direct
 .SM URL.
 .
 .IP
-If the additional link is not desirable, it can be turned off by setting
+If the additional link or \fC<figure>\fP/\fC<figcaption>\fP tags are not
+desirable, they can be turned off by setting
 .B add-image-links
+and
+.B add-figcaption
 to \[lq]0\[rq].
 .
 .IP \[bu]
@@ -608,6 +613,12 @@ directive. (See
 .SS Special YAML variables
 .
 .IP \[bu] 4
+.BR add-figcaption .
+If set to \[lq]0\[rq], \fC<figure>\fP and \fC<figcaption>\fP tags around images
+will not be added (otherwise they will by default, see
+.BR Images ).
+.
+.IP \[bu]
 .BR add-footnote-div .
 If set to \[lq]1\[rq], list of footnotes preceded by a horizontal rule will be
 surrounded with a div having the id \[lq]\fCfootnotes\fP\[rq] (see
