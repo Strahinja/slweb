@@ -1614,6 +1614,60 @@ end_head_start_body(FILE* output)
 }
 
 int
+begin_article(FILE* output, const BOOL add_article_header, 
+        const uint8_t* author, const uint8_t* title, 
+        const uint8_t* header_text, const char* title_heading_level, 
+        uint8_t* date, const BOOL ext_in_permalink, const char* permalink_url)
+{
+    if (title || date)
+        print_output(output, "<header>\n");
+
+    if (title)
+        print_output(output, "<h%s>%s</h%s>\n", 
+                title_heading_level ? title_heading_level : "2", 
+                (char*)title, 
+                title_heading_level ? title_heading_level : "2");
+
+    if (header_text)
+        print_output(output, "<p>%s</p>\n", (char*)header_text);
+
+    if (author)
+        print_output(output, "<address>%s</address>\n", author);
+
+    if (date && input_filename)
+    {
+        char* link = strip_ext(input_filename);
+        uint8_t* samedir_permalink = get_value(vars, vars_count, 
+                (uint8_t*)"samedir-permalink", NULL);
+        char* real_link = NULL;
+        uint8_t* permalink_macro = get_value(macros, macros_count,
+                (uint8_t*)"permalink", NULL);
+        CALLOC(real_link, char, BUFSIZE)
+
+        if (ext_in_permalink)
+            strncat(link, timestamp_output_ext, BUFSIZE-strlen(link)-1);
+
+        if (permalink_url)
+            process_timestamp(output, permalink_url, permalink_macro, date);
+        else if (samedir_permalink && !u8_strcmp(samedir_permalink, (uint8_t*)"1"))
+        {
+            get_realpath(&real_link, input_dirname, link);
+            process_timestamp(output, real_link, permalink_macro, date);
+        }
+        else
+            process_timestamp(output, link, permalink_macro, date);
+
+        free(real_link);
+        free(link);
+    }
+
+    if (title || date)
+        print_output(output, "</header>\n");
+
+    return 0;
+}
+
+int
 end_footnotes(FILE* output, BOOL add_footnote_div)
 {
     size_t footnote = 0;
@@ -1666,9 +1720,12 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
 {
     uint8_t* title                     = NULL;
     uint8_t* title_heading_level       = NULL;
+    uint8_t* header_text               = NULL;
+    uint8_t* author                    = NULL;
     uint8_t* date                      = NULL;
     uint8_t* permalink_url             = NULL;
     uint8_t* ext_in_permalink          = NULL;
+    uint8_t* var_add_article_header    = NULL;
     uint8_t* var_add_image_links       = NULL;
     uint8_t* var_add_figcaption        = NULL;
     uint8_t* var_add_footnote_div      = NULL;
@@ -1709,18 +1766,21 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
     if (!macros)
         exit(error(EINVAL, (uint8_t*)"Invalid argument (macros)"));
 
-    title = get_value(vars, vars_count, (uint8_t*)"title", NULL);
-    title_heading_level = get_value(vars, vars_count,
+    title                  = get_value(vars, vars_count, (uint8_t*)"title", NULL);
+    title_heading_level    = get_value(vars, vars_count,
             (uint8_t*)"title-heading-level", NULL);
-    date = get_value(vars, vars_count, (uint8_t*)"date", NULL);
-    permalink_url = get_value(vars, vars_count, (uint8_t*)"permalink-url", NULL);
-    ext_in_permalink = get_value(vars, vars_count, (uint8_t*)"ext-in-permalink", NULL);
-    var_add_image_links = get_value(vars, vars_count, (uint8_t*)"add-image-links", NULL);
-    add_image_links = !(var_add_image_links && *var_add_image_links == '0');
-    var_add_figcaption = get_value(vars, vars_count, (uint8_t*)"add-figcaption", NULL);
-    add_figcaption = !(var_add_figcaption && *var_add_figcaption == '0');
-    var_add_footnote_div = get_value(vars, vars_count, (uint8_t*)"add-footnote-div", NULL);
-    add_footnote_div = var_add_footnote_div && *var_add_footnote_div == '1';
+    header_text            = get_value(vars, vars_count, (uint8_t*)"header-text", NULL);
+    author                 = get_value(vars, vars_count, (uint8_t*)"author", NULL);
+    date                   = get_value(vars, vars_count, (uint8_t*)"date", NULL);
+    permalink_url          = get_value(vars, vars_count, (uint8_t*)"permalink-url", NULL);
+    ext_in_permalink       = get_value(vars, vars_count, (uint8_t*)"ext-in-permalink", NULL);
+    var_add_article_header = get_value(vars, vars_count, (uint8_t*)"add-article-header", NULL);
+    var_add_image_links    = get_value(vars, vars_count, (uint8_t*)"add-image-links", NULL);
+    add_image_links        = !(var_add_image_links && *var_add_image_links == '0');
+    var_add_figcaption     = get_value(vars, vars_count, (uint8_t*)"add-figcaption", NULL);
+    add_figcaption         = !(var_add_figcaption && *var_add_figcaption == '0');
+    var_add_footnote_div   = get_value(vars, vars_count, (uint8_t*)"add-footnote-div", NULL);
+    add_footnote_div       = var_add_footnote_div && *var_add_footnote_div == '1';
 
     CALLOC(line, uint8_t, BUFSIZE)
     token_size = BUFSIZE;
@@ -1741,39 +1801,11 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
         end_head_start_body(output);
     }
 
-    if (title)
-        print_output(output, "<h%s>%s</h%s>\n", 
-                title_heading_level ? (char*)title_heading_level : "2", 
-                (char*)title, 
-                title_heading_level ? (char*)title_heading_level : "2");
-
-    if (date && input_filename)
-    {
-        char* link = strip_ext(input_filename);
-        uint8_t* samedir_permalink = get_value(vars, vars_count, 
-                (uint8_t*)"samedir-permalink", NULL);
-        char* real_link = NULL;
-        uint8_t* permalink_macro = get_value(macros, macros_count,
-                (uint8_t*)"permalink", NULL);
-        CALLOC(real_link, char, BUFSIZE)
-
-        if (ext_in_permalink && *ext_in_permalink != (ucs4_t)'0')
-            strncat(link, timestamp_output_ext, BUFSIZE-strlen(link)-1);
-
-        if (permalink_url)
-            process_timestamp(output, (char*)permalink_url, permalink_macro,
-                    date);
-        else if (samedir_permalink && !u8_strcmp(samedir_permalink, (uint8_t*)"1"))
-        {
-            get_realpath(&real_link, input_dirname, link);
-            process_timestamp(output, real_link, permalink_macro, date);
-        }
-        else
-            process_timestamp(output, link, permalink_macro, date);
-
-        free(real_link);
-        free(link);
-    }
+    begin_article(output, 
+            var_add_article_header && *var_add_article_header == '1',
+            author, title, header_text, (char*)title_heading_level, date, 
+            ext_in_permalink && *ext_in_permalink != '0', 
+            (char*)permalink_url);
 
     RESET_TOKEN(token, ptoken, token_size)
 

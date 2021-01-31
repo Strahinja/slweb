@@ -613,6 +613,11 @@ directive. (See
 .SS Special YAML variables
 .
 .IP \[bu] 4
+.BR add-article-header .
+If set to \[lq]1\[rq], title, date and header text at the beginning of the
+output body will be enclosed in a \fC<header>\fP tag.
+.
+.IP \[bu]
 .BR add-figcaption .
 If set to \[lq]0\[rq], \fC<figure>\fP and \fC<figcaption>\fP tags around images
 will not be added (otherwise they will by default, see
@@ -629,6 +634,12 @@ surrounded with a div having the id \[lq]\fCfootnotes\fP\[rq] (see
 If set to \[lq]0\[rq], links around images will not be added (otherwise they
 will by default, see
 .BR Images ).
+.
+.IP \[bu]
+.BR author .
+If set, the contents of this variable will be added to the start of the output
+body (inside a \fC<header>\fP tag if it is set), surrounded by
+\fC<address></address>\fP.
 .
 .IP \[bu]
 .BR csv-delimiter .
@@ -665,6 +676,11 @@ if present, this
 will be used as a favicon
 .SM URL
 instead of the default, \fC/favicon.ico\fP.
+.
+.IP \[bu]
+.BR header-text .
+The contents of this variable will be added to the start of the output body
+(inside a \fC<header>\fP tag if it is set), surrounded by \fC<p></p>\fP.
 .
 .IP \[bu]
 .BR permalink-url .
@@ -715,8 +731,8 @@ file.
 .
 .IP \[bu]
 .BR title .
-If present, contents of this variable will be prepended to the body as a heading
-with the level determined by the 
+If present, contents of this variable will be prepended to the body (inside a
+\fC<header>\fP tag if it is set) as a heading with the level determined by the 
 .I title-heading-level 
 variable, defaulting
 to 2.  (\fCtitle: Some title\fP  becomes  \fC<h2>Some title</h2>\fP).
