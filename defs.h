@@ -119,10 +119,14 @@ typedef struct
 #define ST_FORMULA           (1 << 25)
 #define ST_DISPLAY_FORMULA   (1 << 26)
 
-#define ST_CS_NONE      0
-#define ST_CS_HEADER    1
-#define ST_CS_REGISTER  (1 << 2)
-#define ST_CS_QUOTE     (1 << 3)
+#define ST_CS_NONE          0
+#define ST_CS_HEADER        1
+#define ST_CS_REGISTER      (1 << 2)
+#define ST_CS_QUOTE         (1 << 3)
+#define ST_CS_COND          (1 << 4)
+#define ST_CS_COND_NONEMPTY (1 << 5)
+#define ST_CS_COND_EMPTY    (1 << 6)
+#define ST_CS_ESCAPE        (1 << 7)
 #pragma GCC diagnostic pop
 
 #endif /* __DEFS_H */

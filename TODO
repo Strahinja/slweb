@@ -9,6 +9,8 @@
 
         [ ] Add numbered lists?
 
+        [ ] Add <abbr>?
+
         [x] Add footnote support
             [x] Add initial support
             [x] Test

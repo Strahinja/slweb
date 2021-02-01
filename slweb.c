@@ -75,6 +75,9 @@ static ULONG state                    = ST_NONE;
     REALLOC(token, uint8_t, token_size) \
     *token = 0; ptoken = token; }
 
+#define ALL(var, mask) ( ((var) & (mask)) == (mask) )
+#define ANY(var, mask) ( (var) & (mask) )
+
 int
 version()
 {
@@ -447,68 +450,140 @@ process_git_log(FILE* output)
     return result ? warning(result, (uint8_t*)"git-log: Cannot run git") : 0;
 }
 
+#define PRINTIF(format, arg) { \
+    if ((ALL(csv_state, ST_CS_COND_NONEMPTY) \
+                && *csv_register[conditional_index-1]) \
+             || (ALL(csv_state, ST_CS_COND_EMPTY) \
+                && !*csv_register[conditional_index-1]) \
+             || !ANY(csv_state, ST_CS_COND_EMPTY | ST_CS_COND_NONEMPTY)) \
+    { fprintf(output, format, arg); } }
+
 int
 print_csv_row(FILE* output, uint8_t** csv_header, uint8_t** csv_register)
 {
-    uint8_t* pcsv_template = csv_template;
-    UBYTE csv_state        = ST_CS_NONE;
-    UBYTE num              = 0;
+    uint8_t* pcsv_template  = csv_template;
+    UBYTE csv_state         = ST_CS_NONE;
+    UBYTE num               = 0;
+    UBYTE conditional_index = 0;
 
     while (*pcsv_template)
     {
+        if (csv_state & ST_CS_ESCAPE)
+        {
+            PRINTIF("%c", *pcsv_template)
+            csv_state &= ~ST_CS_ESCAPE;
+            pcsv_template++;
+            continue;
+        }
+
         switch (*pcsv_template)
         {
+        case '\\':
+            csv_state |= ST_CS_ESCAPE;
+            pcsv_template++;
+            break;
         case '$':
             if (csv_state & ST_CS_REGISTER)
             {
-                fprintf(output, "$");
-                csv_state &= ST_CS_REGISTER;
+                PRINTIF("%c", '$')
+                csv_state &= ~ST_CS_REGISTER;
             }
             else
                 csv_state |= ST_CS_REGISTER;
             pcsv_template++;
             break;
         case '#':
-            if (csv_state & ST_CS_REGISTER)
-            {
-                if (csv_state & ST_CS_HEADER)
-                {
-                    error(1, (uint8_t*)"csv: Invalid header register mark");
-                    csv_state &= ~(ST_CS_REGISTER | ST_CS_HEADER);
-                }
-                else
-                    csv_state |= ST_CS_HEADER;
-            }
-            else
-                fprintf(output, "#");
-            pcsv_template++;
-            break;
-        case '1': case '2': case '3': case '4': case '5': 
-        case '6': case '7': case '8': case '9':
             if (csv_state & ST_CS_HEADER)
             {
-                num = *pcsv_template - '0';
-                fprintf(output, "%s", csv_header[num-1]);
+                error(1, (uint8_t*)"csv: Invalid header register mark");
                 csv_state &= ~(ST_CS_REGISTER | ST_CS_HEADER);
             }
             else if (csv_state & ST_CS_REGISTER)
             {
+                csv_state &= ~ST_CS_REGISTER;
+                csv_state |= ST_CS_HEADER;
+            }
+            else
+                PRINTIF("%c", '#')
+            pcsv_template++;
+            break;
+        case '?':
+            if (csv_state & ST_CS_COND)
+            {
+                error(1, (uint8_t*)"csv: Invalid conditional mark");
+                csv_state &= ~ST_CS_COND;
+            }
+            else if (csv_state & ST_CS_REGISTER)
+            {
+                csv_state &= ~ST_CS_REGISTER;
+                csv_state |= ST_CS_COND;
+            }
+            else
+                PRINTIF("%c", '?')
+            pcsv_template++;
+            break;
+        case '!':
+            if (ALL(csv_state, ST_CS_COND | ST_CS_COND_NONEMPTY))
+            {
+                csv_state &= ~(ST_CS_COND | ST_CS_COND_NONEMPTY);
+                csv_state |= ST_CS_COND_EMPTY;
+            }
+            else if (csv_state & ST_CS_COND)
+            {
+                error(1, (uint8_t*)"Empty conditional before/without nonempty"
+                        " conditional");
+                csv_state &= ~(ST_CS_COND | ST_CS_COND_EMPTY);
+            }
+            else
+                PRINTIF("%c", '!')
+            pcsv_template++;
+            break;
+        case '/':
+            if (ALL(csv_state, ST_CS_COND | ST_CS_COND_EMPTY))
+                csv_state &= ~(ST_CS_COND | ST_CS_COND_EMPTY);
+            else if (ALL(csv_state, ST_CS_COND))
+                csv_state &= ~(ST_CS_COND | ST_CS_COND_NONEMPTY);
+            else
+                PRINTIF("%c", '/')
+            pcsv_template++;
+            break;
+        case '1': case '2': case '3': case '4': case '5': 
+        case '6': case '7': case '8': case '9':
+            if (csv_state & ST_CS_COND)
+            {
+                conditional_index = *pcsv_template - '0';
+                csv_state &= ~ST_CS_COND;
+                csv_state |= ST_CS_COND_NONEMPTY;
+            }
+            else if (csv_state & ST_CS_HEADER)
+            {
                 num = *pcsv_template - '0';
-                fprintf(output, "%s", csv_register[num-1]);
+                PRINTIF("%s", csv_header[num-1])
+                csv_state &= ~ST_CS_HEADER;
+            }
+            else if (csv_state & ST_CS_REGISTER)
+            {
+                num = *pcsv_template - '0';
+                PRINTIF("%s", csv_register[num-1])
                 csv_state &= ~ST_CS_REGISTER;
             }
             else
-                fprintf(output, "%c", *pcsv_template);
+                PRINTIF("%c", *pcsv_template)
             pcsv_template++;
             break;
         default:
-            if (csv_state & ST_CS_REGISTER)
+            if (csv_state & ST_CS_HEADER)
+            {
+                error(1, (uint8_t*)"csv: Invalid header register mark");
+                csv_state &= ~ST_CS_HEADER;
+            }
+            else if (csv_state & ST_CS_REGISTER)
             {
                 error(1, (uint8_t*)"csv: Invalid register mark");
                 csv_state &= ~ST_CS_REGISTER;
             }
             else
-                fprintf(output, "%c", *pcsv_template);
+                PRINTIF("%c", *pcsv_template)
             pcsv_template++;
         }
     }
@@ -519,12 +594,12 @@ int
 process_csv(uint8_t* arg_token, FILE* output, BOOL read_yaml_macros_and_links, 
         BOOL end_tag)
 {
-    if (read_yaml_macros_and_links)
-        return 0;
-
     if (end_tag)
     {
         state &= ~ST_CSV_BODY;
+
+        if (read_yaml_macros_and_links)
+            return 0;
 
         FILE* csv                                 = fopen(csv_filename, "rt");
         size_t csv_lineno                         = 0;
@@ -665,6 +740,10 @@ process_csv(uint8_t* arg_token, FILE* output, BOOL read_yaml_macros_and_links,
             exit(error(1, (uint8_t*)"Can't nest csv directives"));
 
         state |= ST_CSV_BODY;
+
+        if (read_yaml_macros_and_links)
+            return 0;
+
         uint8_t* saveptr = NULL;
         uint8_t* args = u8_strtok(arg_token, (uint8_t*)" ", &saveptr);
         args = u8_strtok(NULL, (uint8_t*)" ", &saveptr);
@@ -1419,7 +1498,7 @@ process_line_start(uint8_t* line, BOOL first_line_in_doc,
         BOOL list_para, FILE* output, uint8_t** token, uint8_t** ptoken)
 {
     if ((first_line_in_doc || previous_line_blank)
-            && !(state & (ST_BLOCKQUOTE | ST_PRE)))
+            && !(ANY(state, ST_BLOCKQUOTE | ST_PRE)))
     {
         if (!list_para)
         {
@@ -1619,7 +1698,7 @@ begin_article(FILE* output, const BOOL add_article_header,
         const uint8_t* header_text, const char* title_heading_level, 
         uint8_t* date, const BOOL ext_in_permalink, const char* permalink_url)
 {
-    if (title || date)
+    if (author || date || header_text || title)
         print_output(output, "<header>\n");
 
     if (title)
@@ -1661,7 +1740,7 @@ begin_article(FILE* output, const BOOL add_article_header,
         free(link);
     }
 
-    if (title || date)
+    if (author || date || header_text || title)
         print_output(output, "</header>\n");
 
     return 0;
@@ -1835,7 +1914,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
             switch (*pline)
             {
             case '-':
-                if (state & (ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
+                if (ANY(state, ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
                             | ST_MACRO_BODY | ST_PRE | ST_YAML_VAL))
                 {
                     CHECKCOPY(token, ptoken, token_size, pline)
@@ -1890,7 +1969,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 break;
             case ':':
                 if (state & ST_YAML
-                        && !(state & (ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
+                        && !(ANY(state, ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
                                 | ST_HEADING | ST_IMAGE | ST_MACRO_BODY 
                                 | ST_PRE | ST_TAG | ST_YAML_VAL))
                         && read_yaml_macros_and_links)
@@ -1927,7 +2006,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 break;
 
             case '`':
-                if (state & (ST_DISPLAY_FORMULA | ST_FORMULA | ST_IMAGE 
+                if (ANY(state, ST_DISPLAY_FORMULA | ST_FORMULA | ST_IMAGE 
                             | ST_MACRO_BODY))
                 {
                     CHECKCOPY(token, ptoken, token_size, pline)
@@ -1952,10 +2031,10 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                     /* Skip the rest of the line (language) */
                     pline = NULL;
                 }
-                else if (!(state & (ST_PRE | ST_TAG | ST_YAML)))
+                else if (!ANY(state, ST_PRE | ST_TAG | ST_YAML))
                 {
                     /* Handle ` within footnotes, headings and link text specially */
-                    if (state & (ST_INLINE_FOOTNOTE | ST_HEADING 
+                    if (ANY(state, ST_INLINE_FOOTNOTE | ST_HEADING 
                                 | ST_FOOTNOTE_TEXT | ST_LINK))
                     {
                         uint8_t* tag = state & ST_CODE
@@ -1985,7 +2064,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                         processed_start_of_line = TRUE;
 
                         if (!read_yaml_macros_and_links 
-                                && !(state & (ST_PRE | ST_HEADING)))
+                                && !(ANY(state, ST_PRE | ST_HEADING)))
                             process_code(output, state & ST_CODE);
                     }
 
@@ -2003,7 +2082,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
 
             case '#':
                 if (colno == 1
-                        && !(state & (ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
+                        && !(ANY(state, ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
                                 | ST_MACRO_BODY | ST_PRE | ST_YAML)))
                 {
                     state |= ST_HEADING;
@@ -2026,7 +2105,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 break;
 
             case '_':
-                if (state & (ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
+                if (ANY(state, ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
                             | ST_HTML_TAG | ST_IMAGE | ST_MACRO_BODY | ST_PRE 
                             | ST_TAG | ST_YAML))
                 {
@@ -2038,7 +2117,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 if (u8_strlen(pline) > 1 && *(pline+1) == '_')
                 {
                     /* Handle __ within footnotes, headings and link text specially */
-                    if (state & (ST_INLINE_FOOTNOTE | ST_HEADING 
+                    if (ANY(state, ST_INLINE_FOOTNOTE | ST_HEADING 
                                 | ST_FOOTNOTE_TEXT | ST_LINK))
                     {
                         uint8_t* tag = state & ST_BOLD
@@ -2068,7 +2147,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                         processed_start_of_line = TRUE;
 
                         if (!read_yaml_macros_and_links 
-                                && !(state & (ST_PRE | ST_CODE | ST_HEADING)))
+                                && !(ANY(state, ST_PRE | ST_CODE | ST_HEADING)))
                             process_bold(output, state & ST_BOLD);
                     }
 
@@ -2079,7 +2158,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 else
                 {
                     /* Handle _ within footnotes, headings and link text specially */
-                    if (state & (ST_INLINE_FOOTNOTE | ST_HEADING 
+                    if (ANY(state, ST_INLINE_FOOTNOTE | ST_HEADING 
                                 | ST_FOOTNOTE_TEXT | ST_LINK))
                     {
                         uint8_t* tag = state & ST_ITALIC
@@ -2109,7 +2188,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                         processed_start_of_line = TRUE;
 
                         if (!read_yaml_macros_and_links 
-                                && !(state & (ST_PRE | ST_CODE | ST_HEADING)))
+                                && !(ANY(state, ST_PRE | ST_CODE | ST_HEADING)))
                             process_italic(output, state & ST_ITALIC);
                     }
 
@@ -2120,7 +2199,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 break;
 
             case '*':
-                if (state & (ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
+                if (ANY(state, ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
                             | ST_HTML_TAG | ST_IMAGE | ST_MACRO_BODY | ST_PRE 
                             | ST_YAML))
                 {
@@ -2151,7 +2230,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 else if (pline_len > 1 && *(pline+1) == '*')
                 {
                     /* Handle ** within footnotes, headings and link text specially */
-                    if (state & (ST_INLINE_FOOTNOTE | ST_HEADING 
+                    if (ANY(state, ST_INLINE_FOOTNOTE | ST_HEADING 
                                 | ST_FOOTNOTE_TEXT | ST_LINK))
                     {
                         uint8_t* tag = state & ST_BOLD
@@ -2181,7 +2260,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                         processed_start_of_line = TRUE;
 
                         if (!read_yaml_macros_and_links 
-                                && !(state & (ST_PRE | ST_CODE | ST_HEADING)))
+                                && !(ANY(state, ST_PRE | ST_CODE | ST_HEADING)))
                             process_bold(output, state & ST_BOLD);
                     }
 
@@ -2192,7 +2271,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 else
                 {
                     /* Handle * within footnotes, headings and link text specially */
-                    if (state & (ST_INLINE_FOOTNOTE | ST_HEADING 
+                    if (ANY(state, ST_INLINE_FOOTNOTE | ST_HEADING 
                                 | ST_FOOTNOTE_TEXT | ST_LINK))
  
                     {
@@ -2223,7 +2302,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                         processed_start_of_line = TRUE;
 
                         if (!read_yaml_macros_and_links 
-                                && !(state & (ST_PRE | ST_CODE | ST_HEADING)))
+                                && !(ANY(state, ST_PRE | ST_CODE | ST_HEADING)))
                             process_italic(output, state & ST_ITALIC);
                     }
 
@@ -2234,7 +2313,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 break;
 
             case ' ':
-                if (state & (ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
+                if (ANY(state, ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
                             | ST_IMAGE | ST_MACRO_BODY | ST_PRE | ST_YAML_VAL))
                 {
                     CHECKCOPY(token, ptoken, token_size, pline)
@@ -2294,7 +2373,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 break;
 
             case '{':
-                if (state & (ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
+                if (ANY(state, ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
                             | ST_HTML_TAG | ST_PRE | ST_YAML | ST_YAML_VAL))
                 {
                     CHECKCOPY(token, ptoken, token_size, pline)
@@ -2347,7 +2426,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 break;
 
             case '/':
-                if (state & (ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
+                if (ANY(state, ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
                             | ST_IMAGE | ST_PRE | ST_HEADING | ST_YAML_VAL))
                 {
                     CHECKCOPY(token, ptoken, token_size, pline)
@@ -2367,7 +2446,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 break;
 
             case '}':
-                if (state & (ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
+                if (ANY(state, ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
                             | ST_IMAGE | ST_PRE | ST_YAML | ST_YAML_VAL))
                 {
                     CHECKCOPY(token, ptoken, token_size, pline)
@@ -2392,7 +2471,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 break;
 
             case '|':
-                if (state & (ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
+                if (ANY(state, ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
                             | ST_HTML_TAG | ST_IMAGE | ST_PRE | ST_TAG 
                             | ST_YAML))
                 {
@@ -2404,7 +2483,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 if (u8_strlen(pline) > 1 && *(pline+1) == '|')
                 {
                     /* Handle || within footnotes, headings and link text specially */
-                    if (state & (ST_INLINE_FOOTNOTE | ST_HEADING 
+                    if (ANY(state, ST_INLINE_FOOTNOTE | ST_HEADING 
                                 | ST_FOOTNOTE_TEXT | ST_LINK))
                     {
                         uint8_t* tag = state & ST_KBD
@@ -2434,7 +2513,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                         processed_start_of_line = TRUE;
 
                         if (!read_yaml_macros_and_links 
-                                && !(state & (ST_PRE | ST_CODE | ST_HEADING)))
+                                && !(ANY(state, ST_PRE | ST_CODE | ST_HEADING)))
                         {
                             state ^= ST_KBD;
                             process_kbd(output, !(state & ST_KBD));
@@ -2453,15 +2532,15 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
 
             case '<':
                 if (read_yaml_macros_and_links
-                        || (state & (ST_DISPLAY_FORMULA | ST_FORMULA 
-                                | ST_IMAGE)))
+                        || ANY(state, ST_DISPLAY_FORMULA | ST_FORMULA 
+                                | ST_IMAGE))
                 {
                     CHECKCOPY(token, ptoken, token_size, pline)
                     colno++;
                     break;
                 }
 
-                if (state & (ST_CODE | ST_KBD | ST_PRE))
+                if (ANY(state, ST_CODE | ST_KBD | ST_PRE))
                 {
                     size_t lt_len = u8_strlen((uint8_t*)"&lt;");
                     *ptoken = 0;
@@ -2482,7 +2561,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 if (state & ST_HTML_TAG)
                     state &= ~ST_HTML_TAG;
 
-                if (state & (ST_DISPLAY_FORMULA | ST_FORMULA | ST_IMAGE 
+                if (ANY(state, ST_DISPLAY_FORMULA | ST_FORMULA | ST_IMAGE 
                             | ST_MACRO_BODY))
                 {
                     CHECKCOPY(token, ptoken, token_size, pline)
@@ -2491,7 +2570,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 }
 
                 if (!read_yaml_macros_and_links
-                        && !(state & (ST_CODE | ST_HEADING | ST_PRE))
+                        && !ANY(state, ST_CODE | ST_HEADING | ST_PRE)
                         && colno == 1)
                 {
                     if (!read_yaml_macros_and_links 
@@ -2511,7 +2590,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 break;
 
             case '!':
-                if (state & (ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
+                if (ANY(state, ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
                             | ST_FOOTNOTE_TEXT | ST_HEADING | ST_IMAGE
                             | ST_INLINE_FOOTNOTE | ST_LINK | ST_MACRO_BODY 
                             | ST_PRE))
@@ -2547,7 +2626,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 break;
 
             case '=':
-                if (state & (ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
+                if (ANY(state, ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
                             | ST_MACRO_BODY | ST_PRE | ST_TAG))
                 {
                     CHECKCOPY(token, ptoken, token_size, pline)
@@ -2571,7 +2650,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
             case '[':
                 pline_len = u8_strlen(pline);
 
-                if (state & (ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
+                if (ANY(state, ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
                             | ST_HEADING | ST_IMAGE | ST_MACRO_BODY | ST_PRE))
                 {
                     CHECKCOPY(token, ptoken, token_size, pline)
@@ -2629,7 +2708,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 break;
 
             case '(':
-                if (state & (ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
+                if (ANY(state, ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
                             | ST_FOOTNOTE_TEXT | ST_HEADING
                             | ST_INLINE_FOOTNOTE | ST_MACRO_BODY | ST_PRE))
                     CHECKCOPY(token, ptoken, token_size, pline)
@@ -2657,7 +2736,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 break;
 
             case ')':
-                if (state & (ST_DISPLAY_FORMULA | ST_FORMULA))
+                if (ANY(state, ST_DISPLAY_FORMULA | ST_FORMULA))
                 {
                     CHECKCOPY(token, ptoken, token_size, pline)
                     colno++;
@@ -2685,7 +2764,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                     }
                     pline++;
                 }
-                else if (state & (ST_LINK_SECOND_ARG | ST_IMAGE_SECOND_ARG))
+                else if (ANY(state, ST_LINK_SECOND_ARG | ST_IMAGE_SECOND_ARG))
                 {
                     *ptoken = 0;
                     if (!read_yaml_macros_and_links)
@@ -2710,7 +2789,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 break;
 
             case ']':
-                if (state & (ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
+                if (ANY(state, ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
                             | ST_HEADING | ST_MACRO_BODY | ST_PRE))
                 {
                     CHECKCOPY(token, ptoken, token_size, pline)
@@ -2844,7 +2923,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 break;
 
             case '^':
-                if (state & (ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
+                if (ANY(state, ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
                             | ST_FOOTNOTE_TEXT | ST_IMAGE | ST_INLINE_FOOTNOTE 
                             | ST_PRE | ST_YAML))
                 {
@@ -2876,7 +2955,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
 
             case '\\':
                 *ptoken = 0;
-                if (state & (ST_DISPLAY_FORMULA | ST_FORMULA 
+                if (ANY(state, ST_DISPLAY_FORMULA | ST_FORMULA 
                             | ST_HTML_TAG | ST_IMAGE | ST_LINK 
                             | ST_MACRO_BODY))
                 {
@@ -2902,7 +2981,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 break;
 
             case '$':
-                if (state & (ST_CODE | ST_CSV_BODY | ST_IMAGE | ST_PRE 
+                if (ANY(state, ST_CODE | ST_CSV_BODY | ST_IMAGE | ST_PRE 
                             | ST_YAML))
                 {
                     CHECKCOPY(token, ptoken, token_size, pline)
@@ -3012,7 +3091,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                 REALLOC(token, uint8_t, token_size)
                 ptoken = token + old_size - 1;
             }
-            u8_strncat(token, (state & (ST_IMAGE | ST_LINK))
+            u8_strncat(token, ANY(state, ST_IMAGE | ST_LINK)
                         ? (uint8_t*)" " : (uint8_t*)"\n", 
                     token_size - token_len - 1);
             ptoken++;
@@ -3100,8 +3179,8 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                     RESET_TOKEN(token, ptoken, token_size)
                     heading_level = 0;
                 }
-                else if (!(state & (ST_DISPLAY_FORMULA | ST_FORMULA 
-                                | ST_IMAGE | ST_LINK)))
+                else if (!ANY(state, ST_DISPLAY_FORMULA | ST_FORMULA 
+                                | ST_IMAGE | ST_LINK))
                     process_text_token(line, first_line_in_doc,
                             previous_line_blank,
                             processed_start_of_line,
@@ -3110,7 +3189,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                             TRUE);
             }
 
-            if (!(state & (ST_PRE | ST_IMAGE_SECOND_ARG | ST_LINK_SECOND_ARG))
+            if (!ANY(state, ST_PRE | ST_IMAGE_SECOND_ARG | ST_LINK_SECOND_ARG)
                         && (!*pbuffer || *pbuffer == '\n'))
             {
                 if (state & ST_PARA_OPEN)
@@ -3175,8 +3254,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
         }
 
         if (!skip_eol && !keep_token && !read_yaml_macros_and_links 
-                && !(state & (ST_YAML | ST_YAML_VAL 
-                        | ST_LINK_SECOND_ARG)))
+                && !ANY(state, ST_YAML | ST_YAML_VAL | ST_LINK_SECOND_ARG))
                 print_output(output, "\n");
 
         if (!keep_token)

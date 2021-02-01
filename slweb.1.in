@@ -441,8 +441,8 @@ home page.
 Directive \fC{csv "csvfile"}{/csv}\fP marks a template. Whatever is between
 \fC{csv}\fP and \fC{/csv}\fP will be processed by
 .B slweb
-and collected as a template. Then, file \fIcsvfile.csv\fP will be read and for
-each of its lines the collected template will be output, substituting each
+and collected as a template. Afterwards, file \fIcsvfile.csv\fP will be read and
+for each of its lines the collected template will be output, substituting each
 occurence of a register mark \fC$\f[CI]n\fR (where \fIn\fP is between 1 and 9,
 inclusive) with the corresponding 
 .SM CSV 
@@ -457,15 +457,28 @@ variable in the calling
 file) and double quotation marks (") as field boundaries. First line in the
 .SM CSV
 file is parsed as a header and associated with register marks \fC$#1\fP to
-\fC$#9\fP.  The symbol $ is represented as \fC$$\fP.
+\fC$#9\fP.  The symbol $ is represented as \fC$$\fP. Consequently, math modes
+(both inline and display) cannot be used within templates.
 .
 .IP "" 8
-For example, having a file \fIsales.csv\fP:
+Parts of the template can be conditionally rendered by using the construct:
+.
+.CDS 8
+$?\f[CI]n\fP
+    <!-- code to include if $\f[CI]n\fC nonempty -->
+$?!
+    <!-- code to include if $\f[CI]n\fC empty -->
+$?/
+.CDE
+.
+.IP "" 4
+where \fIn\fP is between 1 and 9, inclusive.  For example, having a file
+\fIsales.csv\fP:
 .
 .CDS 8
 "Item";"Q1 2020";"Q2 2020";"Q3 2020";"Q4 2020"
-"Toothpick";"15.2";"12";"16.4";"10"
-"Teapot";"1.2";"2";"5";"3.5"
+"Toothpick";"15.2";"12";"";"10"
+"Teapot";"1.2";"";"5";"3.5"
 .CDE
 .
 .IP "" 4
@@ -476,8 +489,10 @@ We can write
 {.sales-segment}
 $#1 {q}$1{/q} sales by quarter for the last year in 
 thousands of units sold (for $$) were as follows:
-{.q1}$2{/.q1} {.q2}$3{/.q2} 
-{.q3}$4{/.q3} {.q4}$5{/.q4}
+$?2{.q1}$2{/.q1}$?!{.q1 na}N/A{/.q1}$?/ 
+$?3{.q2}$3{/.q2}$?!{.q2 na}N/A{/.q2}$?/
+$?4{.q3}$4{/.q3}$?!{.q3 na}N/A{/.q3}$?/
+$?5{.q4}$5{/.q4}$?!{.q4 na}N/A{/.q4}$?/
 {/.sales-segment}
 {/csv}
 .CDE
@@ -487,16 +502,21 @@ to get:
 .
 .CDS 8
 <div class="sales-segment">
-Item <q>Toothpick</q> sales by quarter for the last year in 
+Item <q>Toothpick</q> sales by quarter for the last year in
 thousands of units sold (for $) were as follows:
-<div class="q1">15.2</div> <div class="q2">12</div> 
-<div class="q3">16.4</div> <div class="q4">10</div>
+<div class="q1">15.2</div>
+<div class="q2">12</div>
+<div class="q3 na">N/A</div>
+<div class="q4">10</div>
 </div>
+
 <div class="sales-segment">
-Item <q>Teapot</q> sales by quarter for the last year in 
+Item <q>Teapot</q> sales by quarter for the last year in
 thousands of units sold (for $) were as follows:
-<div class="q1">1.2</div> <div class="q2">2</div> 
-<div class="q3">5</div> <div class="q4">3.5</div>
+<div class="q1">1.2</div>
+<div class="q2 na">N/A</div>
+<div class="q3">5</div>
+<div class="q4">3.5</div>
 </div>
 .CDE
 .

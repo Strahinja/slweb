@@ -1,0 +1,11 @@
+{csv "sales"}
+{.sales-segment}
+$#1 {q}$1{/q} sales by quarter for the last year in 
+thousands of units sold (for $$) were as follows:
+$?2{.q1}$2{/.q1}$?!{.q1 na}N/A{/.q1}$?/ 
+$?3{.q2}$3{/.q2}$?!{.q2 na}N/A{/.q2}$?/
+$?4{.q3}$4{/.q3}$?!{.q3 na}N/A{/.q3}$?/
+$?5{.q4}$5{/.q4}$?!{.q4 na}N/A{/.q4}$?/
+{/.sales-segment}
+{/csv}
+
