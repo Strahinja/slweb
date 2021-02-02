@@ -143,14 +143,12 @@ This is a text[^first].
 gives (some lines are wrapped for this manual):
 .
 .CDS 8
-This is a text<a href="#footnote-1" id="footnote-text-1">
-<sup>1</sup></a>.
+<p>This is a text<a href="#footnote-1" id="footnote-text-1">
+<sup>1</sup></a>.</p>
 
-</p>
 <hr />
 <p id="footnote-1"><a href="#footnote-text-1">1.</a>  
-With a footnote!
-</p>
+With a footnote!</p>
 .CDE
 .
 .IP \- 4
