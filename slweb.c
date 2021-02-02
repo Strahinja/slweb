@@ -767,7 +767,7 @@ int
 process_include(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links)
 {
     if (read_yaml_macros_and_links)
-        return 0;
+        return 0;    
 
     if (!input_filename)
         return warning(1, (uint8_t*)"Cannot use 'include' in stdin");
@@ -775,25 +775,20 @@ process_include(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links)
     uint8_t* ptoken         = u8_strchr(token, (ucs4_t)' ');
     char* include_filename  = NULL;
     char* pinclude_filename = NULL;
-    int var_pipe_fds[2];
     
     if (!ptoken)
         exit(error(1, (uint8_t*)"Directive 'include' requires"
                 " an argument"));
 
-    pipe(var_pipe_fds);
     fflush(output);
     pid_t pid = fork();
     int pstatus = 0;
 
     if (pid > 0)
-    {
-        close(var_pipe_fds[PIPE_WRITE_INDEX]);
         wait(&pstatus);
-    }
     else if (pid == 0)
     {
-        close(var_pipe_fds[PIPE_READ_INDEX]);
+        prctl(PR_SET_PDEATHSIG, SIGTERM);
 
         CALLOC(include_filename, char, BUFSIZE)
         pinclude_filename = include_filename;
@@ -854,7 +849,6 @@ process_include(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links)
             free(buffer);
             return result;
         }
-
         state = ST_NONE;
         current_footnote = 0;
         current_inline_footnote = 0;
@@ -870,7 +864,6 @@ process_include(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links)
     }
     else
         exit(error(1, (uint8_t*)"Fork failed"));
-
 
     return 0;
 }
