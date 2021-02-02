@@ -156,8 +156,7 @@ With a footnote!</p>
 can be added by using the construct \fC^[footnotetext]\fP. For example, input
 .
 .CDS 8
-Inline footnote^[Footnote text needs to fit on a line!] in a
-paragraph.
+Inline footnote^[Footnote text] in a paragraph.
 .CDE
 .
 .IP "" 
@@ -169,7 +168,7 @@ id="inline-footnote-text-1"><sup>1</sup></a> in a
 paragraph.
 <hr />
 <p id="inline-footnote-1"><a href="#inline-footnote-text-1">
-1.</a> Footnote text needs to fit on a line!</p>
+1.</a> Footnote text</p>
 .CDE
 .RE
 .

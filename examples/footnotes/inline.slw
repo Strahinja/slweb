@@ -5,7 +5,8 @@ site-name: Inline footnotes test
 # Inline footnotes
 
 Footnotes can also be inline
-^[Note that with inline footnotes, the _entire_ footnote needs to fit on a single line!].
+^[Like this one. An inline footnote can span multiple lines, it doesn't need to
+be on a single line.].
 
 Here's another paragraph^[With a footnote.].
 

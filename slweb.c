@@ -775,19 +775,26 @@ process_include(uint8_t* token, FILE* output, BOOL read_yaml_macros_and_links)
     uint8_t* ptoken         = u8_strchr(token, (ucs4_t)' ');
     char* include_filename  = NULL;
     char* pinclude_filename = NULL;
+    int var_pipe_fds[2];
     
     if (!ptoken)
         exit(error(1, (uint8_t*)"Directive 'include' requires"
                 " an argument"));
 
+    pipe(var_pipe_fds);
     fflush(output);
     pid_t pid = fork();
     int pstatus = 0;
 
     if (pid > 0)
+    {
+        close(var_pipe_fds[PIPE_WRITE_INDEX]);
         wait(&pstatus);
+    }
     else if (pid == 0)
     {
+        close(var_pipe_fds[PIPE_READ_INDEX]);
+
         CALLOC(include_filename, char, BUFSIZE)
         pinclude_filename = include_filename;
         ptoken++;
@@ -899,6 +906,20 @@ int
 process_list_end(FILE* output)
 {
     fprintf(output, "</ul>\n");
+    return 0;
+}
+
+int
+process_numlist_start(FILE* output)
+{
+    fprintf(output, "<ol>");
+    return 0;
+}
+
+int
+process_numlist_end(FILE* output)
+{
+    fprintf(output, "</ol>\n");
     return 0;
 }
 
@@ -1506,7 +1527,20 @@ process_line_start(uint8_t* line, BOOL first_line_in_doc,
             {
                 state &= ~ST_LIST;
                 if (!read_yaml_macros_and_links)
+                {
+                    process_list_item_end(output);
                     process_list_end(output);
+                }
+            }
+
+            if (state & ST_NUMLIST)
+            {
+                state &= ~ST_NUMLIST;
+                if (!read_yaml_macros_and_links)
+                {
+                    process_list_item_end(output);
+                    process_numlist_end(output);
+                }
             }
 
             if (state & ST_FOOTNOTE_TEXT)
@@ -1944,6 +1978,15 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                         && u8_strlen(pline) > 1
                         && *(pline+1) == ' ')
                 {
+                    if (state & ST_NUMLIST)
+                    {
+                        state &= ~ST_NUMLIST;
+                        if (!read_yaml_macros_and_links)
+                        {
+                            process_list_item_end(output);
+                            process_numlist_end(output);
+                        }
+                    }
                     if (!read_yaml_macros_and_links)
                     {
                         if (!(state & ST_LIST))
@@ -1967,6 +2010,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                     colno++;
                 }
                 break;
+
             case ':':
                 if (state & ST_YAML
                         && !(ANY(state, ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
@@ -2085,6 +2129,26 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                         && !(ANY(state, ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
                                 | ST_MACRO_BODY | ST_PRE | ST_YAML)))
                 {
+                    if (state & ST_LIST)
+                    {
+                        state &= ~ST_LIST;
+                        if (!read_yaml_macros_and_links)
+                        {
+                            process_list_item_end(output);
+                            process_list_end(output);
+                        }
+                    }
+
+                    if (state & ST_NUMLIST)
+                    {
+                        state &= ~ST_NUMLIST;
+                        if (!read_yaml_macros_and_links)
+                        {
+                            process_list_item_end(output);
+                            process_numlist_end(output);
+                        }
+                    }
+
                     state |= ST_HEADING;
                     heading_level = 1;
                     pline++;
@@ -2803,6 +2867,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                     process_inline_footnote(token, read_yaml_macros_and_links,
                             output);
 
+                    keep_token = FALSE;
                     RESET_TOKEN(token, ptoken, token_size)
                     state &= ~ST_INLINE_FOOTNOTE;
                     pline++;
@@ -2944,6 +3009,7 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
 
                     RESET_TOKEN(token, ptoken, token_size)
                     state |= ST_INLINE_FOOTNOTE;
+                    keep_token = TRUE;
                     pline += 2;
                     colno += 2;
                     break;
@@ -3060,6 +3126,51 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                     }
 
                     pline++;
+                    colno++;
+                }
+                break;
+
+            case '1': case '2': case '3': case '4': case '5':
+            case '6': case '7': case '8': case '9': case '0':
+                if (ANY(state, ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA
+                            | ST_MACRO_BODY | ST_PRE | ST_YAML_VAL))
+                {
+                    CHECKCOPY(token, ptoken, token_size, pline)
+                    colno++;
+                }
+                else if (colno == 1
+                        && u8_strlen(pline) > 1
+                        && (*(pline+1) == '.' || *(pline+1) == ')'))
+                {
+                    if (state & ST_LIST)
+                    {
+                        state &= ~ST_LIST;
+                        if (!read_yaml_macros_and_links)
+                        {
+                            process_list_item_end(output);
+                            process_list_end(output);
+                        }
+                    }
+                    if (!read_yaml_macros_and_links)
+                    {
+                        if (!(state & ST_NUMLIST))
+                            process_numlist_start(output);
+                        else
+                            process_list_item_end(output);
+                        process_list_item_start(output);
+                    }
+
+                    processed_start_of_line = TRUE;
+                    skip_eol = FALSE;
+
+                    state |= ST_NUMLIST;
+
+                    pline += 2;
+                    colno += 2;
+                }
+                else
+                {
+                    CHECKCOPY(token, ptoken, token_size, pline)
                     colno++;
                 }
                 break;
@@ -3209,6 +3320,16 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                         process_list_end(output);
                     }
                     state &= ~ST_LIST;
+                }
+
+                if (!*pbuffer && (state & ST_NUMLIST))
+                {
+                    if (!read_yaml_macros_and_links)
+                    {
+                        process_list_item_end(output);
+                        process_numlist_end(output);
+                    }
+                    state &= ~ST_NUMLIST;
                 }
 
                 if (!*pbuffer && (state & ST_FOOTNOTE_TEXT))

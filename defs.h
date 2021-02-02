@@ -113,11 +113,12 @@ typedef struct
 #define ST_HTML_TAG          (1 << 19)
 #define ST_KBD               (1 << 20)
 #define ST_LIST              (1 << 21)
-#define ST_FOOTNOTE          (1 << 22)
-#define ST_FOOTNOTE_TEXT     (1 << 23)
-#define ST_INLINE_FOOTNOTE   (1 << 24)
-#define ST_FORMULA           (1 << 25)
-#define ST_DISPLAY_FORMULA   (1 << 26)
+#define ST_NUMLIST           (1 << 22)
+#define ST_FOOTNOTE          (1 << 23)
+#define ST_FOOTNOTE_TEXT     (1 << 24)
+#define ST_INLINE_FOOTNOTE   (1 << 25)
+#define ST_FORMULA           (1 << 26)
+#define ST_DISPLAY_FORMULA   (1 << 27)
 
 #define ST_CS_NONE          0
 #define ST_CS_HEADER        1
