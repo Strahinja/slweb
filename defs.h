@@ -41,6 +41,7 @@
 #define PROGRAMNAME   "slweb"
 #define VERSION       "0.3.7"
 #define COPYRIGHTYEAR "2020, 2021"
+#define MADEBY_URL    "https://strahinja.github.io/slweb"
 
 #define BUFSIZE       1024
 #define KEYSIZE       256
