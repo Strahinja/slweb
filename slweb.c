@@ -45,6 +45,7 @@ static size_t current_inline_footnote = 0;
 static uint8_t* csv_template          = NULL;
 static size_t csv_template_size       = 0;
 static char* csv_filename             = NULL;
+static long csv_iter                  = 0;
 static ULONG state                    = ST_NONE;
 
 #define CHECKEXITNOMEM(ptr) { if (!ptr) exit(error(ENOMEM, \
@@ -627,7 +628,7 @@ process_csv(uint8_t* arg_token, FILE* output, BOOL read_yaml_macros_and_links,
         for (UBYTE i = 0; i < MAX_CSV_REGISTERS; i++)
             CALLOC(csv_register[i], uint8_t, BUFSIZE)
 
-        while (!feof(csv))
+        while (!feof(csv) && (!csv_iter || csv_lineno <= csv_iter))
         {
             uint8_t* eol = NULL;
             if (!fgets((char*)bufline, BUFSIZE, csv))
@@ -744,6 +745,7 @@ process_csv(uint8_t* arg_token, FILE* output, BOOL read_yaml_macros_and_links,
         if (read_yaml_macros_and_links)
             return 0;
 
+        csv_iter = 0;
         uint8_t* saveptr = NULL;
         uint8_t* args = u8_strtok(arg_token, (uint8_t*)" ", &saveptr);
         args = u8_strtok(NULL, (uint8_t*)" ", &saveptr);
@@ -758,6 +760,14 @@ process_csv(uint8_t* arg_token, FILE* output, BOOL read_yaml_macros_and_links,
         *(args_base + u8_strlen(args_base) - 1) = 0;
         snprintf(csv_filename, BUFSIZE, "%s/%s.csv", input_dirname, (char*)args_base);
         free(args_base);
+        args = u8_strtok(NULL, (uint8_t*)" ", &saveptr);
+        if (args)
+        {
+            errno = 0;
+            csv_iter = strtol((char*)args, NULL, 10);
+            if (errno)
+                exit(error(errno, (uint8_t*)"csv: Invalid argument '%s'", args));
+        }
     }
 
     return 0;
@@ -1402,6 +1412,71 @@ process_kbd(FILE* output, BOOL end_tag)
     return 0;
 }
 
+int
+process_table_start(FILE* output)
+{
+    print_output(output, "<table>\n");
+    return 0;
+}
+
+int 
+process_table_header_start(FILE* output)
+{
+    print_output(output, "<thead>\n<tr><th>");
+    return 0;
+}
+
+int
+process_table_header_cell(FILE* output)
+{
+    print_output(output, "</th><th>");
+    return 0;
+}
+
+int 
+process_table_header_end(FILE* output)
+{
+    print_output(output, "</th></tr>\n</thead>\n");
+    return 0;
+}
+
+int
+process_table_body_start(FILE* output, BOOL start_row)
+{
+    print_output(output, "<tbody>\n");
+    if (start_row)
+        print_output(output, "<tr><td>");
+    return 0;
+}
+
+int
+process_table_body_row_start(FILE* output)
+{
+    print_output(output, "<tr><td>");
+    return 0;
+}
+
+int
+process_table_body_cell(FILE* output)
+{
+    print_output(output, "</td><td>");
+    return 0;
+}
+
+int
+process_table_body_row_end(FILE* output)
+{
+    print_output(output, "</td></tr>\n");
+    return 0;
+}
+
+int
+process_table_end(FILE* output)
+{
+    print_output(output, "</tbody>\n</table>\n");
+    return 0;
+}
+
 BOOL
 url_is_local(char* url)
 {
@@ -1543,9 +1618,12 @@ process_line_start(uint8_t* line, BOOL first_line_in_doc,
                 state &= ~(ST_FOOTNOTE_TEXT | ST_PARA_OPEN);
             }
         }
-        if (!read_yaml_macros_and_links)
-            print_output(output, "<p>");
-        state |= ST_PARA_OPEN;
+        if (!ANY(state, ST_TABLE | ST_TABLE_HEADER | ST_TABLE_LINE))
+        {
+            if (!read_yaml_macros_and_links)
+                print_output(output, "<p>");
+            state |= ST_PARA_OPEN;
+        }
     }
     return 0;
 }
@@ -2580,6 +2658,124 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
                     pline += 2;
                     colno += 2;
                 }
+                /* Partial tables (for templating) */
+                else if (!(state & ST_PRE) && colno == 1 && u8_strlen(pline) > 1 
+                        && *(pline+1) == '@')
+                {
+                    skip_eol = TRUE;
+
+                    pline += 2;
+                    colno += 2;
+
+                    switch (*pline)
+                    {
+                    case '\\':
+                        if (!read_yaml_macros_and_links)
+                        {
+                            process_table_start(output);
+                            process_table_header_start(output);
+                        }
+                        pline = NULL;
+                        break;
+
+                    case '#':
+                        state |= ST_TABLE_HEADER;
+                        pline++;
+                        colno++;
+                        break;
+
+                    case '-':
+                        state &= ~ST_TABLE_HEADER;
+                        if (!read_yaml_macros_and_links)
+                            process_table_body_start(output, FALSE);
+                        pline = NULL;
+                        break;
+
+                    case ' ':
+                        state |= ST_TABLE;
+                        if (!read_yaml_macros_and_links)
+                            process_table_body_row_start(output);
+                        break;
+
+                    case '/':
+                        state &= ~ST_TABLE;
+                        process_table_end(output);
+                        pline = NULL;
+                        break;
+
+                    default:
+                        warning(1, (uint8_t*)"Invalid partial table line");
+                        CHECKCOPY(token, ptoken, token_size, pline)
+                        colno++;
+                    }
+                }
+                else if (!(state & ST_PRE) && colno == 1)
+                {
+                    skip_eol = TRUE;
+
+                    if (state & ST_TABLE_HEADER)
+                    {
+                        state &= ~ST_TABLE_HEADER;
+                        state |= ST_TABLE_LINE;
+                        pline = NULL;
+                        break;
+                    }
+                    
+                    if (state & ST_TABLE_LINE)
+                    {
+                        state &= ~ST_TABLE_LINE;
+                        state |= ST_TABLE;
+                        if (!read_yaml_macros_and_links)
+                            process_table_body_start(output, TRUE);
+                    }
+                    else if (state & ST_TABLE)
+                    {
+                        if (!read_yaml_macros_and_links)
+                            process_table_body_row_start(output);
+                    }
+                    else
+                    {
+                        state |= ST_TABLE_HEADER;
+                        if (!read_yaml_macros_and_links)
+                        {
+                            process_table_start(output);
+                            process_table_header_start(output);
+                        }
+                    }
+
+                    pline++;
+                    colno++;
+                }
+                else if (state & ST_TABLE_HEADER)
+                {
+                    *ptoken = 0;
+                    if (!read_yaml_macros_and_links)
+                    {
+                        print_output(output, "%s", token);
+                        if (u8_strlen(pline) > 1)
+                            process_table_header_cell(output);
+                        else
+                            process_table_header_end(output);
+                    }
+                    RESET_TOKEN(token, ptoken, token_size)
+                    pline++;
+                    colno++;
+                }
+                else if (state & ST_TABLE)
+                {
+                    *ptoken = 0;
+                    if (!read_yaml_macros_and_links)
+                    {
+                        print_output(output, "%s", token);
+                        if (u8_strlen(pline) > 1)
+                            process_table_body_cell(output);
+                        else
+                            process_table_body_row_end(output);
+                    }
+                    RESET_TOKEN(token, ptoken, token_size)
+                    pline++;
+                    colno++;
+                }
                 else
                 {
                     CHECKCOPY(token, ptoken, token_size, pline)
@@ -3362,6 +3558,24 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
             {
                 state &= ~ST_BLOCKQUOTE;
                 process_blockquote(output, TRUE);
+            }
+
+            if (ANY(state, ST_TABLE_HEADER | ST_TABLE_LINE) 
+                    && (!line_len || !*pbuffer))
+            {
+                if (!read_yaml_macros_and_links)
+                {
+                    warning(1, (uint8_t*)"Malformed table");
+                    process_table_end(output);
+                }
+                state &= ~(ST_TABLE_HEADER | ST_TABLE_LINE);
+            }
+
+            if ((state & ST_TABLE) && (!line_len || !*pbuffer))
+            {
+                if (!read_yaml_macros_and_links)
+                    process_table_end(output);
+                state &= ~ST_TABLE;
             }
 
             previous_line_blank = FALSE;

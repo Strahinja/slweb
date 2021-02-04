@@ -405,6 +405,63 @@ will produce:
 Text surrounded by newlines will be put inside \fC<p></p>\fP tags. See
 .SM "KNOWN LIMITATIONS."
 .
+.IP \[bu] 4
+.BR Tables .
+Lines starting with vertical bars (\fC|\fP) will be transformed into
+.SM HTML
+tables. The first such line is treated as a header row, second as the alignment
+specifier (currently ignored), and the rest regular rows. Table cells and header
+cells are specified by additional bar characters. For example, input:
+.
+.CDS 8
+| Month | Jan | Feb | Mar | Apr |
+|-------|-----|-----|-----|-----|
+| Qty   | 2.35| 1.2 |  8  |  15 |
+.CDE
+.
+.IP "" 4
+will be transformed into:
+.
+.CDS 8
+<table>
+<thead>
+<tr><th> Month </th><th> Jan </th><th> Feb </th><th> Mar </th>
+<th> Apr </th></tr>
+</thead>
+<tbody>
+<tr><td> Qty   </td><td> 2.35</td><td> 1.2 </td><td>  8  </td>
+<td>  15 </td></tr>
+</tbody>
+</table>
+.CDE
+.
+.IP "" 4
+.B Partial tables
+are a modification of Markdown tables, allowing them to be combined with the
+.SM CSV
+directive. In order for tables to work with templating, they need two additional
+lines at the top and the bottom, to mark the start and the end of the table. All
+the lines in partial tables need to start with \[lq]\fC|@\fP\[rq], with only the
+character following at-mark being different:
+.
+.CDS 8
+|@\\------|-----|-----|-----|-----|
+{csv "../csv/sales" 1}
+|@#  $#1 | $#2 | $#3 | $#4 | $#5 |
+{/csv}
+|@-------|-----|-----|-----|-----|
+{csv "../csv/sales"}
+|@    $1 | $2  | $3  | $4  | $5  |
+{/csv}
+|@/------|-----|-----|-----|-----|
+.CDE
+.
+.IP "" 4
+The rest of the line following the third character in top, bottom and lines
+separating header from body is ignored by the parser and is included in this
+example only for aesthetic purposes. See
+.BR "CSV templating" .
+.
 .SS Math mode
 .
 .LP
@@ -435,13 +492,15 @@ home page.
 .
 .IP \[bu]
 .BR "CSV templating" .
-Directive \fC{csv "csvfile"}{/csv}\fP marks a template. Whatever is between
-\fC{csv}\fP and \fC{/csv}\fP will be processed by
+Directive \fC{csv "\f[CI]csvfile\fC" \f[CI]iter\fC}{/csv}\fR marks a template.
+Whatever is between \fC{csv}\fP and \fC{/csv}\fP will be processed by
 .B slweb
 and collected as a template. Afterwards, file \fIcsvfile.csv\fP will be read and
-for each of its lines the collected template will be output, substituting each
-occurence of a register mark \fC$\f[CI]n\fR (where \fIn\fP is between 1 and 9,
-inclusive) with the corresponding 
+for each of its lines (up to
+.IR iter ,
+if present) the collected template will be output, substituting each occurence
+of a register mark \fC$\f[CI]n\fR (where \fIn\fP is between 1 and 9, inclusive)
+with the corresponding 
 .SM CSV 
 field of the read line.
 .SM CSV

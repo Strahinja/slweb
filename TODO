@@ -1,6 +1,8 @@
                                       TODO
                                       ====
 
+        [x] Add tables
+
         [ ] keep-macros variable: when present in an included file, macros from
             child process get added to the parent
 

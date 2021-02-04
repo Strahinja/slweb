@@ -1,0 +1,18 @@
+## Standard tables
+
+Code:
+
+```
+| ID | Name         | Age |
+|----|--------------|-----|
+| 1  | John Smith   | 23  |
+| 2  | Peter Robson | 34  |
+```
+
+gives:
+
+| ID | Name         | Age |
+|----|--------------|-----|
+| 1  | John Smith   | 23  |
+| 2  | Peter Robson | 34  |
+

@@ -1,0 +1,16 @@
+---
+site-name: Tables demo
+stylesheet: tables.css
+---
+
+# Tables
+
+Tables generally follow Markdown syntax, with a few modifications.
+
+Tables aren't formatted by default in HTML, so to look "good" they need some
+CSS.
+
+{include "standard"}
+
+{include "csv"}
+

@@ -119,6 +119,9 @@ typedef struct
 #define ST_INLINE_FOOTNOTE   (1 << 25)
 #define ST_FORMULA           (1 << 26)
 #define ST_DISPLAY_FORMULA   (1 << 27)
+#define ST_TABLE_HEADER      (1 << 28)
+#define ST_TABLE_LINE        (1 << 29)
+#define ST_TABLE             (1 << 30)
 
 #define ST_CS_NONE          0
 #define ST_CS_HEADER        1
