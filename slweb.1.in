@@ -759,6 +759,11 @@ The contents of this variable will be added to the start of the output body
 (inside a \fC<header>\fP tag if it is set), surrounded by \fC<p></p>\fP.
 .
 .IP \[bu]
+.BR lang .
+Contents of this variable will be used for the \fClang\fP attribute of the
+\fC<html>\fP tag.
+.
+.IP \[bu]
 .BR permalink-url .
 If present, this
 .SM URL

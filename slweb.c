@@ -1747,15 +1747,17 @@ process_formula(FILE* output, const uint8_t* token, BOOL display_formula)
 int
 begin_html_and_head(FILE* output)
 {
-    uint8_t* site_name = get_value(vars, vars_count, (uint8_t*)"site-name", NULL);
-    uint8_t* site_desc = get_value(vars, vars_count, (uint8_t*)"site-desc", NULL);
+    uint8_t* lang        = get_value(vars, vars_count, (uint8_t*)"lang", NULL);
+    uint8_t* site_name   = get_value(vars, vars_count, (uint8_t*)"site-name", NULL);
+    uint8_t* site_desc   = get_value(vars, vars_count, (uint8_t*)"site-desc", NULL);
     uint8_t* favicon_url = get_value(vars, vars_count, (uint8_t*)"favicon-url", NULL);
 
     print_output(output, "<!DOCTYPE html>\n"
-            "<html lang=\"en\">\n"
+            "<html lang=\"%s\">\n"
             "<head>\n"
             "<title>%s</title>\n"
-            "<meta charset=\"utf8\" />\n",
+            "<meta charset=\"utf-8\" />\n",
+            lang ? (char*)lang : "en",
             site_name ? (char*)site_name : "");
 
     char* favicon = NULL;
