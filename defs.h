@@ -86,6 +86,8 @@ typedef struct
     BOOL     seen;    /* for use with macros */
 } KeyValue;
 
+typedef int (*csv_callback_t)(FILE* output, uint8_t** csv_header, uint8_t** csv_register);
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-const-variable"
 #define MAX_HEADING_LEVEL  4

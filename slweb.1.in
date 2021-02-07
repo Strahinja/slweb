@@ -718,6 +718,11 @@ body (inside a \fC<header>\fP tag if it is set), surrounded by
 \fC<address></address>\fP.
 .
 .IP \[bu]
+.BR canonical .
+Contents of this variable will be added as a value of a \fCrel\fP attribute for
+the \fC<link rel="canonical" />\fP tag.
+.
+.IP \[bu]
 .BR csv-delimiter .
 Changes the delimiter used for 
 .I .csv
@@ -762,6 +767,49 @@ The contents of this variable will be added to the start of the output body
 .BR lang .
 Contents of this variable will be used for the \fClang\fP attribute of the
 \fC<html>\fP tag.
+.
+.IP \[bu]
+.BR meta .
+Contents of this variable is treated as a filename specifying the CSV file
+containing a list of values to be inserted into meta tags. The first row of this
+CSV file is treated as the header row and ignored. First column in this CSV file
+contains the meta variable names, and the second column contains meta variable
+values. For each row, a \fC<meta name="\f[CI]firstcol\fC"
+content="\f[CI]secondcol\fC" />\fR is inserted, where
+.I firstcol
+is the first column, and
+.I secondcol
+is the second column.  If the values in the second column are surrounded with
+percent signs (\fC%\fP), the value between them is treated as the name of the
+YAML variable to insert.  For example, having the file
+.IR m.csv :
+.
+.CDS 8
+"Name","Content"
+"og:url","%canonical%"
+.CDE
+.
+.IP ""
+and
+.
+.CDS 8
+---
+canonical: https://example.com/
+meta: m.csv
+---
+.CDE
+.
+.IP ""
+in the
+.I .slw
+file, a
+.
+.CDS 8
+<meta name="og:url" content="https://example.com/" />
+.CDE
+.
+.IP ""
+line will be added to the output.
 .
 .IP \[bu]
 .BR permalink-url .

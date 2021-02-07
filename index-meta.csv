@@ -1,0 +1,11 @@
+"Name","Content"
+"og:type","website"
+"og:url","%canonical%"
+"og:title","%site-name%"
+"og:description","%site-desc%"
+"twitter:card","summary_large_image"
+"twitter:url","%canonical%"
+"twitter:title","%site-name%"
+"twitter:creator","@strahinja_radic"
+"twitter:description","%site-desc%"
+

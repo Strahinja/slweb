@@ -402,16 +402,32 @@ read_file_into_buffer(uint8_t** buffer, size_t* buffer_size, char* input_filenam
 }
 
 int
-process_meta(FILE* output, const uint8_t* csv_filename)
+read_csv(FILE* output, const char* filename, csv_callback_t callback);
+
+int
+print_meta_var(FILE* output, uint8_t** csv_header, uint8_t** csv_register)
 {
-    FILE* csv = fopen((const char*)csv_filename, "r");
-    uint8_t* bufline = NULL;
-    uint8_t* pbufline = NULL;
-    size_t csv_lineno = 0;
-    if (!csv)
-        exit(error(ENOENT, (uint8_t*)"meta: No such file: %s", csv_filename));
-    /*while (*/
-    fclose(csv);
+    if (*csv_register && *(csv_register+1))
+    {
+        uint8_t* pvalue = *(csv_register+1);
+        size_t value_len = u8_strlen(pvalue);
+        if (*pvalue == '%' && *(pvalue+value_len-1) == '%')
+        {
+            uint8_t* var_name = NULL;
+            var_name = u8_strdup(pvalue+1);
+            *(var_name+value_len-2) = 0;
+            uint8_t* value = get_value(vars, vars_count, var_name, NULL);
+
+            if (value)
+                print_output(output, "<meta name=\"%s\" content=\"%s\" />\n",
+                        *csv_register, value);
+
+            free(var_name);
+        }
+        else
+            print_output(output, "<meta name=\"%s\" content=\"%s\" />\n",
+                    *csv_register, *(csv_register+1));
+    }
     return 0;
 }
 
@@ -606,70 +622,89 @@ print_csv_row(FILE* output, uint8_t** csv_header, uint8_t** csv_register)
 }
 
 int
-process_csv(uint8_t* arg_token, FILE* output, BOOL read_yaml_macros_and_links, 
-        BOOL end_tag)
+read_csv(FILE* output, const char* filename, csv_callback_t callback)
 {
-    if (end_tag)
+    if (!callback)
+        exit(error(EINVAL, (uint8_t*)"read_csv: Invalid callback argument"));
+
+    FILE* csv                                 = NULL;
+    size_t csv_lineno                         = 0;
+    uint8_t* bufline                          = NULL;
+    uint8_t* pbufline                         = NULL;
+    uint8_t* token                            = NULL;
+    uint8_t* ptoken                           = NULL;
+    size_t token_size                         = 0;
+    UBYTE csv_state                           = ST_CS_NONE;
+    uint8_t* csv_header[MAX_CSV_REGISTERS];
+    UBYTE current_header                      = 0;
+    uint8_t* csv_register[MAX_CSV_REGISTERS];
+    UBYTE current_register                    = 0;
+    uint8_t* csv_delimiter                    = get_value(vars, vars_count,
+            (uint8_t*)"csv-delimiter", NULL);
+
+    if (!(csv = fopen(filename, "rt")))
+        exit(error(ENOENT, (uint8_t*)"csv: No such file: %s", filename));
+
+    CALLOC(bufline, uint8_t, BUFSIZE)
+    token_size = BUFSIZE;
+    CALLOC(token, uint8_t, token_size)
+    for (UBYTE i = 0; i < MAX_CSV_REGISTERS; i++)
+        CALLOC(csv_header[i], uint8_t, BUFSIZE)
+    for (UBYTE i = 0; i < MAX_CSV_REGISTERS; i++)
+        CALLOC(csv_register[i], uint8_t, BUFSIZE)
+
+    while (!feof(csv) && (!csv_iter || csv_lineno <= csv_iter))
     {
-        state &= ~ST_CSV_BODY;
+        uint8_t* eol = NULL;
+        if (!fgets((char*)bufline, BUFSIZE, csv))
+            break;
+        eol = u8_strchr(bufline, (ucs4_t)'\n');
+        if (eol)
+            *eol = 0;
 
-        if (read_yaml_macros_and_links)
-            return 0;
-
-        FILE* csv                                 = fopen(csv_filename, "rt");
-        size_t csv_lineno                         = 0;
-        uint8_t* bufline                          = NULL;
-        uint8_t* pbufline                         = NULL;
-        uint8_t* token                            = NULL;
-        uint8_t* ptoken                           = NULL;
-        size_t token_size                         = 0;
-        UBYTE csv_state                           = ST_CS_NONE;
-        uint8_t* csv_header[MAX_CSV_REGISTERS];
-        UBYTE current_header                      = 0;
-        uint8_t* csv_register[MAX_CSV_REGISTERS];
-        UBYTE current_register                    = 0;
-        uint8_t* csv_delimiter                    = get_value(vars, vars_count,
-                (uint8_t*)"csv-delimiter", NULL);
-
-        if (!csv)
-            exit(error(ENOENT, (uint8_t*)"csv: No such file: %s", csv_filename));
-
-        CALLOC(bufline, uint8_t, BUFSIZE)
-        token_size = BUFSIZE;
-        CALLOC(token, uint8_t, token_size)
-        for (UBYTE i = 0; i < MAX_CSV_REGISTERS; i++)
-            CALLOC(csv_header[i], uint8_t, BUFSIZE)
-        for (UBYTE i = 0; i < MAX_CSV_REGISTERS; i++)
-            CALLOC(csv_register[i], uint8_t, BUFSIZE)
-
-        while (!feof(csv) && (!csv_iter || csv_lineno <= csv_iter))
+        pbufline = bufline;
+        RESET_TOKEN(token, ptoken, token_size)
+        current_register = 0;
+        while (*pbufline)
         {
-            uint8_t* eol = NULL;
-            if (!fgets((char*)bufline, BUFSIZE, csv))
-                break;
-            eol = u8_strchr(bufline, (ucs4_t)'\n');
-            if (eol)
-                *eol = 0;
-
-            pbufline = bufline;
-            RESET_TOKEN(token, ptoken, token_size)
-            current_register = 0;
-            while (*pbufline)
+            switch (*pbufline)
             {
-                switch (*pbufline)
+            case '"':
+                if (csv_state & ST_CS_QUOTE)
+                    csv_state &= ~ST_CS_QUOTE;
+                else
+                    csv_state |= ST_CS_QUOTE;
+                pbufline++;
+                break;
+            case ';':
+            case ',':
+                if (csv_state & ST_CS_QUOTE)
+                    CHECKCOPY(token, ptoken, token_size, pbufline)
+                else
                 {
-                case '"':
-                    if (csv_state & ST_CS_QUOTE)
-                        csv_state &= ~ST_CS_QUOTE;
+                    *ptoken = 0;
+                    if (csv_lineno > 0)
+                    {
+                        if (current_register < MAX_CSV_REGISTERS)
+                            u8_strncpy(csv_register[current_register++], token,
+                                    BUFSIZE-1);
+                    }
                     else
-                        csv_state |= ST_CS_QUOTE;
+                    {
+                        if (current_header < MAX_CSV_REGISTERS)
+                            u8_strncpy(csv_header[current_header++], token, 
+                                    BUFSIZE-1);
+                    }
+                    RESET_TOKEN(token, ptoken, token_size)
                     pbufline++;
-                    break;
-                case ';':
-                case ',':
-                    if (csv_state & ST_CS_QUOTE)
-                        CHECKCOPY(token, ptoken, token_size, pbufline)
-                    else
+                }
+                break;
+            default:
+                if (csv_state & ST_CS_QUOTE)
+                    CHECKCOPY(token, ptoken, token_size, pbufline)
+                else
+                {
+                    if (csv_delimiter && *pbufline == *csv_delimiter)
                     {
                         *ptoken = 0;
                         if (csv_lineno > 0)
@@ -687,64 +722,58 @@ process_csv(uint8_t* arg_token, FILE* output, BOOL read_yaml_macros_and_links,
                         RESET_TOKEN(token, ptoken, token_size)
                         pbufline++;
                     }
-                    break;
-                default:
-                    if (csv_state & ST_CS_QUOTE)
-                        CHECKCOPY(token, ptoken, token_size, pbufline)
                     else
-                    {
-                        if (csv_delimiter && *pbufline == *csv_delimiter)
-                        {
-                            *ptoken = 0;
-                            if (csv_lineno > 0)
-                            {
-                                if (current_register < MAX_CSV_REGISTERS)
-                                    u8_strncpy(csv_register[current_register++], token,
-                                            BUFSIZE-1);
-                            }
-                            else
-                            {
-                                if (current_header < MAX_CSV_REGISTERS)
-                                    u8_strncpy(csv_header[current_header++], token, 
-                                            BUFSIZE-1);
-                            }
-                            RESET_TOKEN(token, ptoken, token_size)
-                            pbufline++;
-                        }
-                        else
-                            CHECKCOPY(token, ptoken, token_size, pbufline)
-                    }
+                        CHECKCOPY(token, ptoken, token_size, pbufline)
                 }
             }
-            *ptoken = 0;
-            if (csv_lineno > 0)
-            {
-                if (current_register < MAX_CSV_REGISTERS)
-                    u8_strncpy(csv_register[current_register++], token, 
-                            BUFSIZE-1);
-            }
-            else
-            {
-                if (current_header < MAX_CSV_REGISTERS)
-                    u8_strncpy(csv_header[current_header++], token, BUFSIZE-1);
-            }
-            RESET_TOKEN(token, ptoken, token_size)
-
-            if (csv_lineno > 0 && pbufline != bufline)
-                print_csv_row(output, csv_header, csv_register);
-
-            for (UBYTE i = 0; i < MAX_CSV_REGISTERS; i++)
-                *csv_register[i] = 0;
-            csv_lineno++;
         }
-        fclose(csv);
-        for (UBYTE i = MAX_CSV_REGISTERS; i > 0; i--)
-            free(csv_register[i-1]);
-        for (UBYTE i = MAX_CSV_REGISTERS; i > 0; i--)
-            free(csv_header[i-1]);
-        free(token);
-        free(bufline);
+        *ptoken = 0;
+        if (csv_lineno > 0)
+        {
+            if (current_register < MAX_CSV_REGISTERS)
+                u8_strncpy(csv_register[current_register++], token, 
+                        BUFSIZE-1);
+        }
+        else
+        {
+            if (current_header < MAX_CSV_REGISTERS)
+                u8_strncpy(csv_header[current_header++], token, BUFSIZE-1);
+        }
+        RESET_TOKEN(token, ptoken, token_size)
 
+        if (csv_lineno > 0 && pbufline != bufline)
+            (*callback)(output, csv_header, csv_register);
+
+        for (UBYTE i = 0; i < MAX_CSV_REGISTERS; i++)
+            *csv_register[i] = 0;
+        csv_lineno++;
+    }
+    fclose(csv);
+    for (UBYTE i = MAX_CSV_REGISTERS; i > 0; i--)
+        free(csv_register[i-1]);
+    for (UBYTE i = MAX_CSV_REGISTERS; i > 0; i--)
+        free(csv_header[i-1]);
+    free(token);
+    free(bufline);
+
+    return 0;
+}
+
+int
+process_csv(uint8_t* arg_token, FILE* output, BOOL read_yaml_macros_and_links, 
+        BOOL end_tag)
+{
+    if (end_tag)
+    {
+        state &= ~ST_CSV_BODY;
+
+        if (read_yaml_macros_and_links)
+            return 0;
+
+        read_csv(output, csv_filename, &print_csv_row);
+
+        free(csv_filename);
+        csv_filename = NULL;
         free(csv_template);
         csv_template = NULL;
         csv_template_size = 0;
@@ -1764,6 +1793,7 @@ begin_html_and_head(FILE* output)
     uint8_t* lang        = get_value(vars, vars_count, (uint8_t*)"lang", NULL);
     uint8_t* site_name   = get_value(vars, vars_count, (uint8_t*)"site-name", NULL);
     uint8_t* site_desc   = get_value(vars, vars_count, (uint8_t*)"site-desc", NULL);
+    uint8_t* canonical   = get_value(vars, vars_count, (uint8_t*)"canonical", NULL);
     uint8_t* favicon_url = get_value(vars, vars_count, (uint8_t*)"favicon-url", NULL);
     uint8_t* meta        = get_value(vars, vars_count, (uint8_t*)"meta", NULL);
 
@@ -1785,7 +1815,17 @@ begin_html_and_head(FILE* output)
     free(favicon);
    
     if (meta)
-        process_meta(output, meta);
+    {
+        char* filename = NULL;
+        CALLOC(filename, char, BUFSIZE)
+        snprintf(filename, BUFSIZE, "%s/%s", input_dirname, (char*)meta);
+        read_csv(output, filename, &print_meta_var);
+        free(filename);
+    }
+
+    if (canonical && *canonical)
+        print_output(output, "<link rel=\"canonical\" href=\"%s\" />\n",
+                (char*)canonical);
 
     if (site_desc && *site_desc)
         print_output(output, "<meta name=\"description\" content=\"%s\" />\n",

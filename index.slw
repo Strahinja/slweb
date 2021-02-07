@@ -1,9 +1,11 @@
 ---
-site-name: slweb - Simple static website generator. 
+site-name: slweb - Simple static website generator
 site-desc: Simple static website generator
 stylesheet: index.css
 stylesheet: https://cdn.jsdelivr.net/npm/katex@0.12.0/dist/katex.min.css
 favicon-url: /slweb/favicon.ico
+canonical: https://strahinja.github.io/slweb/
+meta: index-meta.csv
 ---
 {main}
 # slweb
