@@ -1,5 +1,6 @@
 .cache
 .redo
+*.session
 .do_built
 .do_built.dir
 *~

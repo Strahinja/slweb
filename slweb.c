@@ -402,6 +402,20 @@ read_file_into_buffer(uint8_t** buffer, size_t* buffer_size, char* input_filenam
 }
 
 int
+process_meta(FILE* output, const uint8_t* csv_filename)
+{
+    FILE* csv = fopen((const char*)csv_filename, "r");
+    uint8_t* bufline = NULL;
+    uint8_t* pbufline = NULL;
+    size_t csv_lineno = 0;
+    if (!csv)
+        exit(error(ENOENT, (uint8_t*)"meta: No such file: %s", csv_filename));
+    /*while (*/
+    fclose(csv);
+    return 0;
+}
+
+int
 process_heading_start(FILE* output, UBYTE heading_level)
 {
     print_output(output, "<h%d>", heading_level);
@@ -1751,6 +1765,7 @@ begin_html_and_head(FILE* output)
     uint8_t* site_name   = get_value(vars, vars_count, (uint8_t*)"site-name", NULL);
     uint8_t* site_desc   = get_value(vars, vars_count, (uint8_t*)"site-desc", NULL);
     uint8_t* favicon_url = get_value(vars, vars_count, (uint8_t*)"favicon-url", NULL);
+    uint8_t* meta        = get_value(vars, vars_count, (uint8_t*)"meta", NULL);
 
     print_output(output, "<!DOCTYPE html>\n"
             "<html lang=\"%s\">\n"
@@ -1768,7 +1783,10 @@ begin_html_and_head(FILE* output)
                 " href=\"%s\" />\n", 
                 favicon_url ? (char*)favicon_url : "/favicon.ico");
     free(favicon);
-    
+   
+    if (meta)
+        process_meta(output, meta);
+
     if (site_desc && *site_desc)
         print_output(output, "<meta name=\"description\" content=\"%s\" />\n",
                 (char*)site_desc);
