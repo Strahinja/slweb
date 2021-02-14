@@ -2302,8 +2302,8 @@ slweb_parse(uint8_t* buffer, FILE* output, BOOL body_only,
 
             case '_':
                 if (ANY(state, ST_CODE | ST_DISPLAY_FORMULA | ST_FORMULA 
-                            | ST_HTML_TAG | ST_IMAGE | ST_MACRO_BODY | ST_PRE 
-                            | ST_TAG | ST_YAML))
+                            | ST_HTML_TAG | ST_IMAGE | ST_LINK_SECOND_ARG 
+                            | ST_MACRO_BODY | ST_PRE | ST_TAG | ST_YAML))
                 {
                     CHECKCOPY(token, ptoken, token_size, pline)
                     colno++;
