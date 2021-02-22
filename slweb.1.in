@@ -752,11 +752,17 @@ permalink will have \fCblog/2020/august\fP.
 .
 .IP \[bu]
 .BR favicon-url .
-if present, this
+If present, this
 .SM URL
 will be used as a favicon
 .SM URL
 instead of the default, \fC/favicon.ico\fP.
+.
+.IP \[bu]
+.BR feed ", " feed-desc .
+If both are present, contents of those variables will be added as \fIhref\fP and
+\fItitle\fP attributes (respectively) to the \fC<link rel="alternate"
+type="application/rss+xml">\fP tag in the page's \fC<head>\fP.
 .
 .IP \[bu]
 .BR header-text .

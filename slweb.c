@@ -49,7 +49,7 @@ static long csv_iter                  = 0;
 static ULONG state                    = ST_NONE;
 
 #define CHECKEXITNOMEM(ptr) { if (!ptr) exit(error(ENOMEM, \
-                (uint8_t*)"Memory allocation failed (out of memory?)\n")); }
+                (uint8_t*)"Memory allocation failed (out of memory?)")); }
 
 #define CALLOC(ptr, ptrtype, nmemb) { ptr = calloc(nmemb, sizeof(ptrtype)); \
     CHECKEXITNOMEM(ptr) }
@@ -1797,6 +1797,9 @@ begin_html_and_head(FILE* output)
     uint8_t* favicon_url = get_value(vars, vars_count, (uint8_t*)"favicon-url", NULL);
     uint8_t* meta        = get_value(vars, vars_count, (uint8_t*)"meta", NULL);
 
+    uint8_t* feed        = get_value(vars, vars_count, (uint8_t*)"feed", NULL);
+    uint8_t* feed_desc   = get_value(vars, vars_count, (uint8_t*)"feed-desc", NULL);
+
     print_output(output, "<!DOCTYPE html>\n"
             "<html lang=\"%s\">\n"
             "<head>\n"
@@ -1826,6 +1829,11 @@ begin_html_and_head(FILE* output)
     if (canonical && *canonical)
         print_output(output, "<link rel=\"canonical\" href=\"%s\" />\n",
                 (char*)canonical);
+
+    if (feed && *feed && feed_desc && *feed_desc)
+        print_output(output, "<link rel=\"alternate\""
+                " type=\"application/rss+xml\" href=\"%s\" title=\"%s\" />\n",
+                (char*)feed, (char*)feed_desc);
 
     if (site_desc && *site_desc)
         print_output(output, "<meta name=\"description\" content=\"%s\" />\n",
