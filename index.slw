@@ -4,7 +4,7 @@ site-desc: Simple static website generator
 stylesheet: index.css
 stylesheet: https://cdn.jsdelivr.net/npm/katex@0.12.0/dist/katex.min.css
 favicon-url: /slweb/favicon.ico
-image: logo-social.webp
+image: https://raw.githubusercontent.com/Strahinja/slweb/master/logo-social.webp
 canonical: https://strahinja.github.io/slweb/
 meta: index-meta.csv
 ---
